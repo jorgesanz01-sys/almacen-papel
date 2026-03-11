@@ -91,14 +91,37 @@
         </div>
 
         <!-- MÉTRICAS -->
-        <div class="warehouse-canvas glass-panel view-panel" id="view-metrics" style="display:none">
+        <div class="warehouse-canvas glass-panel view-panel metrics-dashboard" id="view-metrics" style="display:none">
             <div class="canvas-header" style="flex-shrink:0;">
                 <h2>Métricas del Almacén</h2>
             </div>
-            <div class="metrics-grid" id="metrics-kpis"></div>
-            <div class="top-list" id="metrics-top" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
-                <div class="top-list-header">Top pasillos por ocupación</div>
-                <div style="flex:1;overflow-y:auto;" id="metrics-top-body"></div>
+            
+            <!-- Contenedor General para el Grid de Métricas -->
+            <div class="metrics-dashboard-grid">
+                
+                <!-- Tarjetas KPI Globales -->
+                <div class="metrics-kpis-wrapper">
+                    <h3>Visión General</h3>
+                    <div class="metrics-grid" id="metrics-kpis"></div>
+                </div>
+
+                <!-- Rankings y Listados distribuidos en grid -->
+                <div class="metrics-rankings-wrapper" id="metrics-rankings-wrapper">
+                    <div class="top-list-box" id="metrics-top-aisles-box">
+                        <div class="top-list-header"><i class="ri-bar-chart-horizontal-fill"></i> Top pasillos por ocupación</div>
+                        <div class="top-list-body" id="metrics-top-body"></div>
+                    </div>
+                    
+                    <div class="top-list-box" id="metrics-top-articles-box">
+                        <div class="top-list-header"><i class="ri-archive-draw-fill"></i> Papeles con más volumen</div>
+                        <div class="top-list-body" id="metrics-top-articles-body"></div>
+                    </div>
+
+                    <div class="top-list-box" id="metrics-grammages-box">
+                        <div class="top-list-header"><i class="ri-pie-chart-2-fill"></i> Distribución por Gramaje</div>
+                        <div class="top-list-body" id="metrics-grammages-body"></div>
+                    </div>
+                </div>
             </div>
         </div>
 

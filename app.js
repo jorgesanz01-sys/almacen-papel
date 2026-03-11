@@ -646,6 +646,8 @@ function setupNavigation() {
 function renderMetrics() {
     const aisles = Object.values(allAislesData);
     let totalKg=0, totalPal=0, totalItems=0, ocupados=0, vacios=0, saturados=0, anulados=0;
+    
+    // Calcular KPIs Globales
     aisles.forEach(a => {
         if (isDisabled(a)) { anulados++; return; }
         const kg  = calcTotalKilos(a.items);
@@ -655,35 +657,95 @@ function renderMetrics() {
         if (kg>0) ocupados++; else vacios++;
         if (occ>75) saturados++;
     });
-    document.getElementById('metrics-kpis').innerHTML = `
-        <div class="metric-card"><div class="metric-label">Total Kilos</div><div class="metric-value" style="color:var(--accent)">${fmtNum(Math.round(totalKg))}</div><div class="metric-sub">en almacén</div></div>
-        <div class="metric-card"><div class="metric-label">Palets Est.</div><div class="metric-value">${fmtNum(Math.round(totalPal))}</div><div class="metric-sub">total estimado</div></div>
-        <div class="metric-card"><div class="metric-label">Referencias</div><div class="metric-value">${fmtNum(totalItems)}</div><div class="metric-sub">líneas de stock</div></div>
-        <div class="metric-card"><div class="metric-label">Ocupados</div><div class="metric-value" style="color:var(--heat-medium)">${ocupados}</div><div class="metric-sub">con stock</div></div>
-        <div class="metric-card"><div class="metric-label">Vacíos</div><div class="metric-value" style="color:var(--heat-empty)">${vacios}</div><div class="metric-sub">libres</div></div>
-        <div class="metric-card"><div class="metric-label">Anulados</div><div class="metric-value" style="color:#6b7280">${anulados}</div><div class="metric-sub">fuera de cálculo</div></div>`;
-    const sorted = aisles.filter(a=>!isDisabled(a)).map(a => {
+
+    // 1. Render KPIs
+    const kpisEl = document.getElementById('metrics-kpis');
+    if (kpisEl) {
+        kpisEl.innerHTML = `
+            <div class="metric-card"><div class="metric-label">Total Kilos</div><div class="metric-value" style="color:var(--accent)">${fmtNum(Math.round(totalKg))}</div><div class="metric-sub">en almacén</div></div>
+            <div class="metric-card"><div class="metric-label">Palets Est.</div><div class="metric-value">${fmtNum(Math.round(totalPal))}</div><div class="metric-sub">total estimado</div></div>
+            <div class="metric-card"><div class="metric-label">Referencias</div><div class="metric-value">${fmtNum(totalItems)}</div><div class="metric-sub">líneas de stock</div></div>
+            <div class="metric-card"><div class="metric-label">Ocupados</div><div class="metric-value" style="color:var(--heat-medium)">${ocupados}</div><div class="metric-sub">con stock</div></div>
+            <div class="metric-card"><div class="metric-label">Vacíos</div><div class="metric-value" style="color:var(--heat-empty)">${vacios}</div><div class="metric-sub">libres</div></div>
+            <div class="metric-card"><div class="metric-label">Anulados</div><div class="metric-value" style="color:#6b7280">${anulados}</div><div class="metric-sub">fuera de cálculo</div></div>`;
+    }
+
+    // 2. Top Pasillos
+    const sortedAisles = aisles.filter(a=>!isDisabled(a)).map(a => {
         const pal = parseFloat(calcPalets(a.items).toFixed(1));
         const occ = Math.round((pal/getCapacity(a))*100);
         return { id:a.id, pal, occ };
-    }).filter(a=>a.pal>0).sort((a,b)=>b.occ-a.occ).slice(0,15);
-    const maxPal = Math.max(...sorted.map(a=>a.pal),1);
+    }).filter(a=>a.pal>0).sort((a,b)=>b.occ-a.occ).slice(0,10); // Reducir a Top 10
+    
+    const maxPal = Math.max(...sortedAisles.map(a=>a.pal), 1);
     const topBody = document.getElementById('metrics-top-body');
-    topBody.innerHTML = sorted.map(a => {
-        const c = getHeatmapColorHex(a.occ);
-        return `<div class="top-list-row" data-aisle="${a.id}">
-            <span class="row-id">P${a.id}</span>
-            <div class="row-bar-wrap"><div class="row-bar" style="width:${Math.min((a.pal/maxPal)*100,100)}%;background:${c};"></div></div>
-            <span class="row-palets">${a.pal} pal.</span>
-            <span class="row-pct" style="color:${c};">${a.occ}%</span>
-        </div>`;
-    }).join('');
-    if (!topBody._delegated) {
-        topBody.addEventListener('click', e => {
-            const row = e.target.closest('.top-list-row[data-aisle]');
-            if (row) goToAisle(row.dataset.aisle);
-        });
-        topBody._delegated = true;
+    if (topBody) {
+        topBody.innerHTML = sortedAisles.map((a, i) => {
+            const c = getHeatmapColorHex(a.occ);
+            // Pequeño delay de transición para la barra
+            setTimeout(() => {
+                const el = topBody.querySelector(`[data-aisle="${a.id}"] .row-bar`);
+                if (el) el.style.width = `${Math.min((a.pal/maxPal)*100,100)}%`;
+            }, 50 + (i * 30));
+
+            return `<div class="top-list-row" data-aisle="${a.id}">
+                <span class="row-id">P${a.id}</span>
+                <div class="row-bar-wrap"><div class="row-bar" style="width:0;background:${c};"></div></div>
+                <span class="row-palets">${a.pal} pal.</span>
+                <span class="row-pct" style="color:${c};">${a.occ}%</span>
+            </div>`;
+        }).join('');
+        
+        if (!topBody._delegated) {
+            topBody.addEventListener('click', e => {
+                const row = e.target.closest('.top-list-row[data-aisle]');
+                if (row) goToAisle(row.dataset.aisle);
+            });
+            topBody._delegated = true;
+        }
+    }
+
+    // 3. Top Artículos (Catálogo global)
+    const cat = buildCatalog();
+    const articles = Object.values(cat).sort((a, b) => b.palets - a.palets).slice(0, 10);
+    const topArticlesBody = document.getElementById('metrics-top-articles-body');
+    if (topArticlesBody) {
+        topArticlesBody.innerHTML = articles.map(art => {
+            return `<div class="top-list-row article-row">
+                <div class="row-desc" title="${esc(art.tipo)}">${esc(art.tipo)}<span>${esc(art.id)}</span></div>
+                <span class="row-palets" style="color:var(--text-main);font-weight:700;">${art.palets.toFixed(1)} pal.</span>
+            </div>`;
+        }).join('');
+    }
+
+    // 4. Distribución por Gramaje
+    const grammages = {};
+    Object.values(cat).forEach(art => {
+        const g = art.gramaje?.trim() || 'Sin definir';
+        if (!grammages[g]) grammages[g] = { label: g, palets: 0, kilos: 0 };
+        grammages[g].palets += art.palets;
+        grammages[g].kilos += art.totalKilos;
+    });
+
+    const gramList = Object.values(grammages)
+        .filter(g => g.palets > 0)
+        .sort((a, b) => b.palets - a.palets).slice(0, 10); // Top 10 gramajes
+    const maxGramPal = Math.max(...gramList.map(g => g.palets), 1);
+
+    const gramBody = document.getElementById('metrics-grammages-body');
+    if (gramBody) {
+        gramBody.innerHTML = gramList.map((g, i) => {
+            setTimeout(() => {
+                const el = gramBody.querySelector(`[data-gram="${esc(g.label)}"] .row-bar`);
+                if (el) el.style.width = `${Math.min((g.palets/maxGramPal)*100, 100)}%`;
+            }, 50 + (i * 30));
+
+            return `<div class="top-list-row grammage-row" data-gram="${esc(g.label)}">
+                <span class="row-gram">${esc(g.label)}</span>
+                <div class="row-bar-wrap"><div class="row-bar" style="width:0;background:var(--heat-empty);"></div></div>
+                <span class="row-palets">${g.palets.toFixed(1)} pal.</span>
+            </div>`;
+        }).join('');
     }
 }
 
@@ -865,38 +927,62 @@ async function handleExcelImport(e) {
     const data   = await file.arrayBuffer();
     const wb     = XLSX.read(data, { type: 'array' });
     const ws     = wb.Sheets[wb.SheetNames[0]];
-    const rows   = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-    if (!rows.length) { alert('El Excel parece vacío.'); return; }
+    // Leer ignorando las cabeceras sucias, buscando la primera fila que parece tener datos (skiprows=5 suele ser estándar)
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    if (!rawRows || rawRows.length < 5) { alert('El Excel parece vacío o no tiene el formato correcto.'); return; }
+    
+    // Asumir que los headers reales están alrededor de la fila 5 o 6
+    let headerRowIndex = 0;
+    for(let i=0; i<10; i++) {
+        if(rawRows[i] && rawRows[i].some(v => String(v).toLowerCase().includes('codigo'))) {
+            headerRowIndex = i;
+            break;
+        }
+    }
 
-    // Detectar columnas automáticamente
-    const keys  = Object.keys(rows[0]);
-    const norm  = s => s.toLowerCase().replace(/[\s_\/]/g, '');
-    const find  = (kw) => keys.find(k => norm(k).includes(norm(kw)));
-
-    // Busca la columna de código (varias variantes incluyendo "Codigo" con espacios como en este Excel)
-    const colCod = find('codigo') || find('referencia') || find('codarticulo') || find('ref') || keys[0];
-    // Busca la columna de kg/palet (incluye "kg/palet" exacto del inventario.xls)
-    const colKg  = find('kg/palet') || find('kgpalet') || find('kgpal') || find('pesopal') || find('kgporapalet') || find('pesopalet');
-
-    if (!colCod) { alert('No encuentro columna de código/referencia.\nColumnas: ' + keys.join(', ')); return; }
-    if (!colKg)  { alert('No encuentro columna de Kg/palet.\nColumnas encontradas: ' + keys.join(', ') + '\n\nAsegúrate de que la columna se llame "kg/palet".'); return; }
+    const headers = rawRows[headerRowIndex].map(h => String(h||'').toLowerCase().replace(/[\s_\/]/g, ''));
+    
+    // Encontrar índices de columnas necesarias
+    const idxCod = headers.findIndex(h => h.includes('codigo') || h.includes('referencia') || h==='ref');
+    const idxKg  = headers.findIndex(h => h.includes('kgpal') || h.includes('kgporpalet') || h.includes('pesopal') || h==='kgpalet' || h==='kg/palet');
+    
+    // Si no encuentra la columna kg, avisamos (la del código es crítica)
+    if (idxCod === -1) { alert('No encuentro columna de código/referencia.'); return; }
+    if (idxKg === -1)  { alert('No encuentro columna de Kg/palet. Asegúrate de que la columna se llame "kg/palet".'); return; }
 
     let updated = 0, skipped = 0;
-    rows.forEach(row => {
-        const refId = String(row[colCod]).trim().replace(/\s+/g, ''); // quitar espacios del código
-        const kg    = parseFloat(String(row[colKg]).replace(',', '.'));
-        if (!refId || refId === '---Stock---' || isNaN(kg) || kg <= 0) { skipped++; return; }
+    
+    // Procesar los datos saltando hasta después de la fila de headers
+    for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.length === 0) continue;
+        
+        const rawCod = String(row[idxCod] || '').trim();
+        // Ignorar filas basura
+        if (!rawCod || rawCod.toLowerCase().includes('codigo') || rawCod.toLowerCase().includes('total listado') || rawCod.includes('e-') || rawCod === '---Stock---') {
+            continue;
+        }
+        
+        const refId = rawCod.replace(/\s+/g, '');
+        const kgRaw = String(row[idxKg] || '').replace(',', '.');
+        const kg = parseFloat(kgRaw);
+        
+        if (!refId || isNaN(kg) || kg <= 0) {
+            skipped++; 
+            continue;
+        }
+        
         getArticleCfg(refId).kgPerPalet = kg;
         updated++;
-    });
+    }
 
     saveArticleConfig();
     invalidateCatalog();
     renderWarehouse();
     renderArticles();
     addLog('sync', `Excel importado: ${updated} kg/palet actualizados, ${skipped} filas ignoradas`);
-    alert(`✅ Importación completada:\n• ${updated} referencias actualizadas\n• ${skipped} filas ignoradas (sin código o kg vacío)\n\nColumna código: "${colCod}"\nColumna kg/palet: "${colKg}"`);
+    alert(`✅ Importación de Kg/Palet completada:\n• ${updated} referencias actualizadas\n• ${skipped} filas ignoradas (sin código o kg vacío)`);
     e.target.value = ''; // reset input
 }
 
