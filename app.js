@@ -3,17 +3,15 @@
 const WAREHOUSE_LAYOUT = [
     { id: 'col-left',     blocks: [
         { id: 'nave1-der', name: 'N1 Derecho (1-17)',    start: 1,  end: 17 },
-        { id: 'nave1-izq', name: 'N1 Izquierdo (43-55)', start: 43, end: 55 }
+        { id: 'nave1-izq', name: 'N1 Izquierdo (43-55)', start: 43, end: 55 },
+        { id: 'taller',  name: 'Taller',    isExternal: true, extId: 'TALLER'  },
+        { id: 'digital', name: 'Digital',   isExternal: true, extId: 'DIGITAL' },
+        { id: 'monge',   name: 'Monge',     isExternal: true, extId: 'MONGE'   }
     ]},
     { id: 'col-center',   blocks: [
         { id: 'nave2-der', name: 'N2 Derecho (18-42)',   start: 18, end: 42 },
         { id: 'nave2-cen', name: 'N2 Central (63-75)',   start: 63, end: 75 },
         { id: 'nave2-izq', name: 'N2 Izquierdo (81-76)', start: 81, end: 76 }
-    ]},
-    { id: 'col-external', blocks: [
-        { id: 'taller', name: 'Taller',         isExternal: true, extId: 'TALLER' },
-        { id: 'monge',  name: 'Monge',          isExternal: true, extId: 'MONGE'  },
-        { id: 'otros',  name: 'Sin Clasificar', isExternal: true, extId: 'OTROS'  }
     ]}
 ];
 
@@ -77,6 +75,16 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
 }
 
+// ─── EXTRAER GRAMAJE DESDE CÓDIGO ─────────────────────────────────────────────
+function extractGramaje(codigo) {
+    const m = codigo.match(/^1(\d+)[A-Za-z]/);
+    if (m) {
+        const num = parseInt(m[1], 10);
+        if (num > 0 && num < 2000) return `${num}g`;
+    }
+    return '-';
+}
+
 // ─── CATÁLOGO GLOBAL DE ARTÍCULOS ─────────────────────────────────────────────
 // Construye un mapa refId → { id, tipo, gramaje, proveedor, totalKilos, palets, aisles[] }
 function buildCatalog() {
@@ -84,8 +92,12 @@ function buildCatalog() {
     const cat = {};
     Object.values(allAislesData).forEach(aisle => {
         (aisle.items || []).forEach(it => {
+            // Determinar gramaje: primero intentar del código, luego del dato original
+            let gramaje = it.gramaje || '';
+            if (!gramaje || gramaje === '-') gramaje = extractGramaje(it.id || '');
+
             if (!cat[it.id]) cat[it.id] = {
-                id: it.id, tipo: it.tipo || '', gramaje: it.gramaje || '',
+                id: it.id, tipo: it.tipo || '', gramaje: gramaje,
                 proveedor: it.proveedor || '', totalKilos: 0, totalHojas: 0,
                 palets: 0, aisles: new Set()
             };
@@ -986,6 +998,121 @@ async function handleExcelImport(e) {
     e.target.value = ''; // reset input
 }
 
+// ─── IMPORTAR INVENTARIO COMPLETO DESDE EXCEL "SUCIO" ─────────────────────────
+async function handleInventoryExcelImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Cargar SheetJS si no está
+    if (!window.XLSX) {
+        await new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    }
+
+    const data = await file.arrayBuffer();
+    const wb   = XLSX.read(data, { type: 'array' });
+    const ws   = wb.Sheets[wb.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+    if (!rawRows || rawRows.length < 6) { alert('El Excel parece vacío o no tiene el formato correcto.'); return; }
+
+    // Buscar la fila de cabeceras (donde aparece "Codigo")
+    let headerRowIndex = 0;
+    for (let i = 0; i < 10; i++) {
+        if (rawRows[i] && rawRows[i].some(v => String(v).toLowerCase().includes('codigo'))) {
+            headerRowIndex = i;
+            break;
+        }
+    }
+
+    // Columnas: 0=Codigo, 1=Descripcion, 3=Proveedor/Desc, 6=P.Costo(ubicacion), 9=Stock
+    const COL_COD = 0, COL_DESC = 1, COL_PROV = 3, COL_UBI = 6, COL_STOCK = 9;
+
+    const newAislesData = {};
+    let imported = 0, ignored = 0;
+
+    for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.length === 0) continue;
+
+        const codigo = String(row[COL_COD] || '').trim();
+        if (!codigo || codigo.toLowerCase().includes('codigo') || codigo.toLowerCase().includes('total listado') || codigo === 'nan') continue;
+
+        const ubiRaw = String(row[COL_UBI] || '').trim().toUpperCase();
+        if (!ubiRaw || ubiRaw === 'NAN' || ubiRaw === 'UNDEFINED') { ignored++; continue; }
+
+        // Determinar ID de ubicación
+        let aisleId = null;
+        if (ubiRaw.includes('TALLER'))      aisleId = 'TALLER';
+        else if (ubiRaw.includes('MONGE'))   aisleId = 'MONGE';
+        else if (ubiRaw.includes('DIGITAL')) aisleId = 'DIGITAL';
+        else {
+            const m = ubiRaw.match(/^C(\d+)/);
+            if (m) {
+                const num = parseInt(m[1], 10);
+                if (num >= 1 && num <= 99) aisleId = String(num).padStart(2, '0');
+            }
+        }
+
+        if (!aisleId) { ignored++; continue; }
+
+        if (!newAislesData[aisleId]) newAislesData[aisleId] = [];
+
+        const desc = String(row[COL_DESC] || '').trim();
+        const prov = String(row[COL_PROV] || '').trim();
+        let hojas = 0;
+        try { hojas = parseInt(parseFloat(String(row[COL_STOCK] || '0')), 10); } catch(e) {}
+        if (isNaN(hojas)) hojas = 0;
+
+        const gramaje = extractGramaje(codigo);
+        const tipo = (prov && prov.length > 5 && prov !== 'nan') ? prov : ((desc && desc !== 'nan') ? desc : 'Papel');
+
+        newAislesData[aisleId].push({
+            id: codigo,
+            tipo: tipo.substring(0, 80),
+            gramaje: gramaje,
+            proveedor: (prov && prov !== 'nan') ? prov.split(' ')[0] : '-',
+            kilos: 0,
+            hojas: hojas,
+            fecha_entrada: 'Sincronizado Excel Web'
+        });
+        imported++;
+    }
+
+    if (imported === 0) {
+        alert('No se han encontrado artículos válidos en el Excel. Revisa que el formato sea correcto.');
+        e.target.value = '';
+        return;
+    }
+
+    // Actualizar allAislesData con los nuevos items
+    Object.keys(newAislesData).forEach(aisleId => {
+        if (allAislesData[aisleId]) {
+            allAislesData[aisleId].items = newAislesData[aisleId];
+        }
+    });
+
+    // Si hay Firestore, sincronizar
+    if (window.firebaseDb) {
+        const db = window.firebaseDb;
+        try {
+            await Promise.all(Object.keys(newAislesData).map(id =>
+                window.firebaseSetDoc(window.firebaseDoc(db, 'almacen', id), { items: newAislesData[id] })
+            ));
+        } catch(err) { console.error('Error sincronizando con Firestore:', err); }
+    }
+
+    invalidateCatalog();
+    renderWarehouse();
+    addLog('sync', `Inventario importado: ${imported} artículos en ${Object.keys(newAislesData).length} pasillos`);
+    alert(`✅ Inventario importado correctamente:\n• ${imported} artículos importados\n• ${Object.keys(newAislesData).length} pasillos actualizados\n• ${ignored} filas ignoradas`);
+    e.target.value = '';
+}
+
 // ─── HISTORIAL ────────────────────────────────────────────────────────────────
 function addLog(type, desc, aisleId) {
     const colors = { system:'#6366f1', update:'#f59e0b', sync:'#22c55e', error:'#ef4444', edit:'#a78bfa', disable:'#6b7280', enable:'#22c55e' };
@@ -1012,24 +1139,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupNavigation();
     document.getElementById('edit-modal').addEventListener('click', () => closeEditModal());
 
+    // Wiring: Subir Inventario Excel
+    document.getElementById('upload-inventory-btn').addEventListener('click', () => {
+        document.getElementById('inventory-excel-input').click();
+    });
+    document.getElementById('inventory-excel-input').addEventListener('change', handleInventoryExcelImport);
+
     if (window.firebaseDb) {
-        const statusEl = document.querySelector('.status-indicator');
+        const statusEl = document.getElementById('sidebar-status');
         statusEl.textContent = 'Conectando...';
         const db = window.firebaseDb, colRef = window.firebaseCollection(db, 'almacen');
-
-        document.getElementById('force-sync-btn').addEventListener('click', async () => {
-            if (!confirm('¿Sobreescribir TODOS los pasillos en Firestore con seed.json?')) return;
-            statusEl.textContent = 'Sincronizando...';
-            document.getElementById('force-sync-btn').disabled = true;
-            try {
-                await Promise.all(Object.keys(allAislesData).map(id =>
-                    window.firebaseSetDoc(window.firebaseDoc(db,'almacen',id), { items: localSeedData[id]?.items||[] })
-                ));
-                addLog('sync','Sincronización forzada desde Excel');
-                alert('¡Completado!'); statusEl.textContent = 'En vivo (Firestore)';
-            } catch(e) { addLog('error',e.message); alert('Error: '+e.message); statusEl.textContent='Error'; }
-            document.getElementById('force-sync-btn').disabled = false;
-        });
 
         let isFirstLoad = true;
         window.firebaseOnSnapshot(colRef, snapshot => {

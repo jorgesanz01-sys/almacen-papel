@@ -4,7 +4,7 @@
       {
         "id": "1010CTD07500105001",
         "tipo": "CARTON 1 MM  75X105 PEFC",
-        "gramaje": "-",
+        "gramaje": "10g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -116,7 +116,7 @@
       {
         "id": "1010CTD07500105001",
         "tipo": "CARTON 1 MM  75X105 PEFC",
-        "gramaje": "-",
+        "gramaje": "10g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -336,7 +336,7 @@
       {
         "id": "1010CTD07500105001",
         "tipo": "CARTON 1 MM  75X105 PEFC",
-        "gramaje": "-",
+        "gramaje": "10g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -538,7 +538,7 @@
       {
         "id": "1012CTD0750105001",
         "tipo": "CARTON 1,25 MM 750X1050MM",
-        "gramaje": "-",
+        "gramaje": "12g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -565,7 +565,7 @@
       {
         "id": "1200EIB0720062002",
         "tipo": "R4 GLOSS 72X62 200GRS PEFC",
-        "gramaje": "4g",
+        "gramaje": "200g",
         "proveedor": "R4",
         "kilos": 0,
         "hojas": 0,
@@ -605,7 +605,7 @@
       {
         "id": "1020CTD0175026001",
         "tipo": "CARTON 2 MM 175x260 MM PEFC",
-        "gramaje": "-",
+        "gramaje": "20g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -753,7 +753,7 @@
       {
         "id": "1020CTD0202014601",
         "tipo": "CARTON 2 MM 20,2X14,6 PEFC",
-        "gramaje": "-",
+        "gramaje": "20g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -901,7 +901,7 @@
       {
         "id": "1020CTD0202014601",
         "tipo": "CARTON 2 MM 20,2X14,6 PEFC",
-        "gramaje": "-",
+        "gramaje": "20g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -1166,7 +1166,7 @@
       {
         "id": "1020CTD0235019001",
         "tipo": "CARTON  2 MM  235X190 MM PEFC",
-        "gramaje": "-",
+        "gramaje": "20g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -1251,7 +1251,7 @@
       {
         "id": "1020CTD0250020101",
         "tipo": "CARTON  2 MM  25X20,1 PEFC",
-        "gramaje": "-",
+        "gramaje": "20g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -1381,7 +1381,7 @@
       {
         "id": "1030CTD0250018001",
         "tipo": "CARTON 3 MM 250X180 MM PEFC",
-        "gramaje": "-",
+        "gramaje": "30g",
         "proveedor": "CARTON",
         "kilos": 0,
         "hojas": 0,
@@ -4333,7 +4333,7 @@
       {
         "id": "11200OFO0880122001",
         "tipo": "OFFSET BLANCO ORIA 88X122 120G",
-        "gramaje": "120g",
+        "gramaje": "1200g",
         "proveedor": "OFFSET",
         "kilos": 0,
         "hojas": 0,
@@ -5395,7 +5395,7 @@
       {
         "id": "1400CAO0640086002",
         "tipo": "PANKABRITE GC2 64X86 450 GRS",
-        "gramaje": "450g",
+        "gramaje": "400g",
         "proveedor": "PANKABRITE",
         "kilos": 0,
         "hojas": 0,
@@ -6439,7 +6439,7 @@
       {
         "id": "1400CAO0640086002",
         "tipo": "PANKABRITE GC2 64X86 450 GRS",
-        "gramaje": "450g",
+        "gramaje": "400g",
         "proveedor": "PANKABRITE",
         "kilos": 0,
         "hojas": 0,
@@ -8106,7 +8106,7 @@
       {
         "id": "1200EIB0960062002",
         "tipo": "R4 GLOSS 96X62 200 GRS PEFC",
-        "gramaje": "4g",
+        "gramaje": "200g",
         "proveedor": "R4",
         "kilos": 0,
         "hojas": 0,
@@ -9888,7 +9888,7 @@
       {
         "id": "1200CAO0760092001",
         "tipo": "FOLDING KRAFT 76X92 205GRS",
-        "gramaje": "205g",
+        "gramaje": "200g",
         "proveedor": "FOLDING",
         "kilos": 0,
         "hojas": 0,
@@ -10089,7 +10089,7 @@
       {
         "id": "1200EIB0960062002",
         "tipo": "R4 GLOSS 96X62 200 GRS PEFC",
-        "gramaje": "4g",
+        "gramaje": "200g",
         "proveedor": "R4",
         "kilos": 0,
         "hojas": 0,

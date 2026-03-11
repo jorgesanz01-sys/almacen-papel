@@ -45,6 +45,18 @@
             </button>
         </nav>
 
+        <!-- SUBIR EXCEL -->
+        <div class="sidebar-excel-section">
+            <button class="nav-item excel-btn" id="upload-inventory-btn" title="Subir inventario completo desde Excel">
+                <i class="ri-file-excel-2-line"></i> Subir Inventario
+            </button>
+            <input type="file" id="inventory-excel-input" accept=".xls,.xlsx" style="display:none">
+            <button class="nav-item excel-btn" id="upload-kgpalet-btn" onclick="importArticleConfig()" title="Importar Kg/Palet desde Excel">
+                <i class="ri-upload-2-line"></i> Importar Kg/Palet
+            </button>
+            <input type="file" id="art-excel-input" accept=".xls,.xlsx" style="display:none" onchange="handleExcelImport(event)">
+        </div>
+
         <div class="global-stats">
             <h3>Ocupación Global</h3>
             <div class="stat-card">
@@ -61,31 +73,19 @@
             <div class="legend-item"><span class="color-box medium"></span> 30–75% Óptimo</div>
             <div class="legend-item"><span class="color-box full"></span> &gt;75% Saturado</div>
         </div>
+
+        <div class="sidebar-status">
+            <div class="status-indicator" id="sidebar-status">En vivo (Firestore)</div>
+        </div>
     </aside>
 
     <!-- ── MAIN ── -->
     <main class="main-content">
 
-        <header class="top-bar glass-panel">
-            <div class="user-profile">
-                <button id="force-sync-btn" class="filter-btn"
-                        style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.3);color:#fca5a5;">
-                    <i class="ri-refresh-line"></i> Forzar Recarga Excel
-                </button>
-                <div class="status-indicator">En vivo (Firestore)</div>
-                <div class="avatar"><i class="ri-user-smile-fill"></i></div>
-            </div>
-        </header>
-
         <!-- MAPA -->
         <div class="warehouse-canvas glass-panel" id="view-map">
             <div class="canvas-header">
                 <h2>Plano del Almacén</h2>
-                <div class="filters">
-                    <button class="filter-btn active" data-filter="all">Todos</button>
-                    <button class="filter-btn" data-filter="bobinas">Bobinas</button>
-                    <button class="filter-btn" data-filter="cortados">Palets Cortados</button>
-                </div>
             </div>
             <div class="warehouse-grid" id="warehouse-grid"></div>
         </div>

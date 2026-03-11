@@ -197,6 +197,34 @@ body {
     transition: width 0.8s ease-in-out;
 }
 
+/* ── SIDEBAR EXCEL UPLOAD ─────────────────────────────────── */
+.sidebar-excel-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 0;
+    border-top: 1px solid var(--glass-border);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.excel-btn {
+    font-size: 11px !important;
+    gap: 6px;
+    color: var(--heat-empty) !important;
+    justify-content: flex-start;
+}
+
+.excel-btn i {
+    font-size: 14px;
+}
+
+/* ── SIDEBAR STATUS ───────────────────────────────────────── */
+.sidebar-status {
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--glass-border);
+}
+
 /* ── LEGEND ────────────────────────────────────────────────── */
 .legend-item {
     display: flex;
@@ -399,7 +427,7 @@ body {
 /* ── RACKS GRID ────────────────────────────────────────────── */
 .racks-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
     gap: 3px;
 }
 
@@ -410,7 +438,7 @@ body {
 
 /* ── RACK (PASILLO) ────────────────────────────────────────── */
 .rack {
-    height: 44px;
+    height: 52px;
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 5px;
     position: relative;
@@ -450,7 +478,7 @@ body {
 .rack.full::before   { background: var(--heat-full);   opacity: 0.28; }
 
 .rack-id {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text-main);
     z-index: 1;
@@ -459,7 +487,7 @@ body {
 }
 
 .aisle-badge {
-    font-size: 9px;
+    font-size: 10px;
     color: rgba(255,255,255,0.65);
     z-index: 1;
     font-family: var(--font-mono);
