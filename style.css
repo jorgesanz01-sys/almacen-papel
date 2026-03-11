@@ -387,6 +387,11 @@ body {
     padding-right: 2px;
 }
 
+/* Col izquierda (N1 + externales): más estrecha */
+#col-left  { flex: 1.1; }
+/* Col central (N2): más ancha */
+#col-center { flex: 2; }
+
 .layout-column::-webkit-scrollbar { width: 3px; }
 .layout-column::-webkit-scrollbar-thumb {
     background: rgba(255,255,255,0.1);
@@ -494,15 +499,15 @@ body {
     line-height: 1;
 }
 
-/* Pasillos externos: fila compacta */
+/* Pasillos externos: fila compacta más estrecha */
 .single-col .rack {
-    height: 34px;
+    height: 30px;
     flex-direction: row;
     justify-content: space-between;
-    padding: 0 10px;
+    padding: 0 8px;
 }
 
-.single-col .rack .rack-id   { font-size: 11px; }
+.single-col .rack .rack-id   { font-size: 10px; }
 .single-col .rack .aisle-badge { font-size: 10px; }
 
 /* ── INSPECTOR ─────────────────────────────────────────────── */

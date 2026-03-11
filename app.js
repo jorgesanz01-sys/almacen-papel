@@ -169,6 +169,7 @@ function renderWarehouse() {
     WAREHOUSE_LAYOUT.forEach(col => {
         const colEl = document.createElement('div');
         colEl.className = 'layout-column';
+        colEl.id = col.id; // allows CSS #col-left / #col-center targeting
 
         col.blocks.forEach(block => {
             const blockEl = document.createElement('div');
