@@ -93,11 +93,20 @@ try:
         except:
             pass
             
-        # Extraer gramaje si falta
+        # Extraer gramaje del código si es posible (ej: 1080ADO... -> 80g)
         gramaje = "-"
-        gm = re.search(r'(\d+)\s*(G|GRS|GR|G/)', prov.upper() + " " + desc.upper())
-        if gm:
-            gramaje = f"{gm.group(1)}g"
+        gm_code = re.search(r'^1(\d+)[A-Za-z]', codigo)
+        if gm_code:
+            try:
+                gramaje = f"{int(gm_code.group(1))}g"
+            except:
+                pass
+                
+        # Extraer gramaje de texto si falla el código
+        if gramaje == "-":
+            gm = re.search(r'(\d+)\s*(G|GRS|GR|G/)', prov.upper() + " " + desc.upper())
+            if gm:
+                gramaje = f"{gm.group(1)}g"
             
         # Determinar el nombre/tipo combinando campos si es necesario
         tipo_final = prov if len(prov) > 5 else desc
