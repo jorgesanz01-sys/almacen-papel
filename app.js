@@ -232,7 +232,64 @@ document.addEventListener('DOMContentLoaded', () => {
     initMockData();
     renderWarehouse();
     
-    // Simulate real-time updates for that WOW factor
+    // Check if Firebase is available
+    if (window.firebaseDb) {
+        const statusInd = document.querySelector('.status-indicator');
+        statusInd.textContent = 'Conectando a Firebase...';
+        
+        const db = window.firebaseDb;
+        const warehouseRef = window.firebaseRef(db, 'warehouse');
+        
+        let isFirstLoad = true;
+        
+        window.firebaseOnValue(warehouseRef, (snapshot) => {
+            const data = snapshot.val();
+            
+            if (data) {
+                // Real data received! Merge it into our local state mapping
+                Object.keys(data).forEach(pos => {
+                    if (allRacksData[pos]) {
+                        allRacksData[pos].isOccupied = data[pos].isOccupied || false;
+                        allRacksData[pos].item = data[pos].item || null;
+                    }
+                });
+                statusInd.textContent = 'En vivo (Firebase)';
+                renderWarehouse();
+            } else if (isFirstLoad && window.firebaseSet) {
+                // Database is completely empty. Let's auto-seed it with our mock data
+                // so the user has something visually impressive immediately
+                console.log("Base de datos vacía. Sembrando con datos iniciales...");
+                
+                // Convert allRacksData array-like values to a plain object
+                const seedData = {};
+                for (let pos in allRacksData) {
+                    seedData[pos] = {
+                        position: allRacksData[pos].position,
+                        isOccupied: allRacksData[pos].isOccupied,
+                        item: allRacksData[pos].item
+                    };
+                }
+                
+                window.firebaseSet(warehouseRef, seedData)
+                    .then(() => console.log("Datos sembrados con éxito. ¡Todo listo!"))
+                    .catch(e => console.error("Error al poblar la base de datos:", e));
+            }
+            
+            isFirstLoad = false;
+        }, (error) => {
+            console.error("Error al escuchar Firebase:", error);
+            statusInd.textContent = 'Error Firebase (Usando Local)';
+            startSimulation();
+        });
+        
+    } else {
+        // Fallback if not connected to Firebase
+        startSimulation();
+    }
+});
+
+function startSimulation() {
+    // Simulate real-time updates for that WOW factor locally
     setInterval(() => {
         const positions = Object.keys(allRacksData);
         if (positions.length === 0) return;
@@ -258,4 +315,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderWarehouse();
     }, 4500);
-});
+}

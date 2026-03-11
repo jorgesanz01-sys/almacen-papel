@@ -76,6 +76,26 @@
     <!-- Inspector Modal (hidden by default) -->
     <div id="inspector-panel" class="inspector-panel"></div>
 
+    <!-- Firebase SDK Setup -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
+
+        const firebaseConfig = {
+            databaseURL: "https://almacen-papel-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
+        
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.firebaseDb = getDatabase(app);
+            window.firebaseRef = ref;
+            window.firebaseOnValue = onValue;
+            window.firebaseSet = set;
+            console.log("Firebase initialized successfully");
+        } catch (e) {
+            console.error("Error initializing Firebase", e);
+        }
+    </script>
     <script type="module" src="app.js"></script>
 </body>
 </html>
