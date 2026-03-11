@@ -1157,3 +1157,16 @@ body {
     background: rgba(99,102,241,0.35) !important;
     color: #fff !important;
 }
+
+/* ── UTILITY CLASSES ──────────────────────────────────────── */
+.text-right  { text-align: right; }
+.text-center { text-align: center; }
+.mono-sm     { font-family: var(--font-mono); font-size: 11px; }
+.c-muted     { color: var(--text-muted); }
+.section-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}

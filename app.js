@@ -22,6 +22,9 @@ let totalGlobalCapacity = 0;
 let localSeedData = {};
 let globalClickListenerAttached = false;
 const activityLog = [];
+let _catalogCache = null;
+let _catalogDirty = true;
+function invalidateCatalog() { _catalogDirty = true; }
 
 // ─── CONFIG LOCAL (localStorage) ─────────────────────────────────────────────
 // aisleConfig[aisleId] = { disabled, capacity }
@@ -48,7 +51,7 @@ function getKgPerPalet(refId) {
 function calcTotalKilos(items) {
     if (!items || !items.length) return 0;
     return items.reduce((s, it) => {
-        const kg = Math.max(0, it.hojas || 0);
+        const kg = Math.max(0, it.kilos || 0);
         return s + kg;
     }, 0);
 }
@@ -57,7 +60,7 @@ function calcTotalKilos(items) {
 function calcPalets(items) {
     if (!items || !items.length) return 0;
     return items.reduce((s, it) => {
-        const kg = Math.max(0, it.hojas || 0);
+        const kg = Math.max(0, it.kilos || 0);
         return s + (kg / getKgPerPalet(it.id));
     }, 0);
 }
@@ -69,10 +72,15 @@ function isDisabled(aisle) { return !!(aisleConfig[aisle.id] || {}).disabled; }
 function getHeatmapClass(r) { return r < 30 ? 'empty' : r <= 75 ? 'medium' : 'full'; }
 function getHeatmapColorHex(r) { return r < 30 ? '#22c55e' : r <= 75 ? '#f59e0b' : '#ef4444'; }
 function fmtNum(n) { return Number(n).toLocaleString('es-ES'); }
+function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
 
 // ─── CATÁLOGO GLOBAL DE ARTÍCULOS ─────────────────────────────────────────────
 // Construye un mapa refId → { id, tipo, gramaje, proveedor, totalKilos, palets, aisles[] }
 function buildCatalog() {
+    if (!_catalogDirty && _catalogCache) return _catalogCache;
     const cat = {};
     Object.values(allAislesData).forEach(aisle => {
         (aisle.items || []).forEach(it => {
@@ -81,14 +89,16 @@ function buildCatalog() {
                 proveedor: it.proveedor || '', totalKilos: 0, totalHojas: 0,
                 palets: 0, aisles: new Set()
             };
-            cat[it.id].totalKilos += Math.max(0, it.hojas || 0);
-            cat[it.id].totalHojas += Math.max(0, it.kilos  || 0);
-            cat[it.id].palets     += Math.max(0, it.hojas || 0) / getKgPerPalet(it.id);
+            cat[it.id].totalKilos += Math.max(0, it.kilos || 0);
+            cat[it.id].totalHojas += Math.max(0, it.hojas || 0);
+            cat[it.id].palets     += Math.max(0, it.kilos || 0) / getKgPerPalet(it.id);
             cat[it.id].aisles.add(aisle.id);
         });
     });
     // Convertir sets a arrays
     Object.values(cat).forEach(a => { a.aisles = [...a.aisles].sort(); });
+    _catalogCache = cat;
+    _catalogDirty = false;
     return cat;
 }
 
@@ -196,17 +206,19 @@ function updateGlobalMetrics(filled, total) {
 
 // ─── LISTENERS ────────────────────────────────────────────────────────────────
 function attachAisleListeners() {
-    document.querySelectorAll('.aisle-unit').forEach(el => {
-        const clone = el.cloneNode(true);
-        el.parentNode.replaceChild(clone, el);
-        clone.addEventListener('click', e => {
+    const grid = document.getElementById('warehouse-grid');
+    if (!grid._delegated) {
+        grid.addEventListener('click', e => {
+            const unit = e.target.closest('.aisle-unit');
+            if (!unit) return;
             e.stopPropagation();
             document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
-            clone.classList.add('active');
-            const data = allAislesData[clone.getAttribute('data-id')];
+            unit.classList.add('active');
+            const data = allAislesData[unit.getAttribute('data-id')];
             if (data) showInspector(data);
         });
-    });
+        grid._delegated = true;
+    }
     if (!globalClickListenerAttached) {
         document.addEventListener('click', e => {
             if (!e.target.closest('.aisle-unit') && !e.target.closest('#inspector-panel') && !e.target.closest('#edit-modal') && !e.target.closest('#search-dropdown')) {
@@ -218,10 +230,10 @@ function attachAisleListeners() {
 }
 
 // ─── INSPECTOR ────────────────────────────────────────────────────────────────
-window.closeInspector = function() {
+function closeInspector() {
     document.getElementById('inspector-panel').classList.remove('visible');
     document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
-};
+}
 
 function showInspector(aisleData) {
     const panel    = document.getElementById('inspector-panel');
@@ -237,8 +249,8 @@ function showInspector(aisleData) {
     const grouped = {};
     (aisleData.items || []).forEach(it => {
         if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0, totalHojas: 0 };
-        grouped[it.id].totalKilos += Math.max(0, it.hojas || 0);
-        grouped[it.id].totalHojas += Math.max(0, it.kilos || 0);
+        grouped[it.id].totalKilos += Math.max(0, it.kilos || 0);
+        grouped[it.id].totalHojas += Math.max(0, it.hojas || 0);
     });
     const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
 
@@ -253,9 +265,9 @@ function showInspector(aisleData) {
                 ${statusBadge}
             </div>
             <div style="display:flex;gap:6px;align-items:flex-start;">
-                <button class="insp-action-btn" onclick="window.openEditModal('${aisleData.id}')" title="Editar configuración"><i class="ri-settings-3-line"></i></button>
-                <button class="insp-action-btn ${disabled?'btn-enable':'btn-disable'}" onclick="window.toggleAisleDisabled('${aisleData.id}')" title="${disabled?'Activar':'Anular'}"><i class="ri-${disabled?'checkbox-circle-line':'forbid-line'}"></i></button>
-                <button class="insp-action-btn btn-close" onclick="window.closeInspector()" title="Cerrar"><i class="ri-close-line"></i></button>
+                <button class="insp-action-btn" data-action="edit" title="Editar configuración"><i class="ri-settings-3-line"></i></button>
+                <button class="insp-action-btn ${disabled?'btn-enable':'btn-disable'}" data-action="toggle" title="${disabled?'Activar':'Anular'}"><i class="ri-${disabled?'checkbox-circle-line':'forbid-line'}"></i></button>
+                <button class="insp-action-btn btn-close" data-action="close" title="Cerrar"><i class="ri-close-line"></i></button>
             </div>
         </div>
         <div class="items-list-container">`;
@@ -264,24 +276,24 @@ function showInspector(aisleData) {
         html += `<table class="items-table">
             <thead><tr>
                 <th>Código</th><th>Descripción</th>
-                <th style="text-align:right">Pliegos</th>
-                <th style="text-align:right">Kg</th>
-                <th style="text-align:right">Kg/pal</th>
-                <th style="text-align:center">Pal. est.</th>
+                <th class="text-right">Pliegos</th>
+                <th class="text-right">Kg</th>
+                <th class="text-right">Kg/pal</th>
+                <th class="text-center">Pal. est.</th>
             </tr></thead><tbody>`;
         rows.forEach(g => {
             const kgPP  = getKgPerPalet(g.id);
             const palEst = (g.totalKilos / kgPP).toFixed(1);
             const isCustom = !!(articleConfig[g.id] && articleConfig[g.id].kgPerPalet > 0);
             html += `<tr>
-                <td class="ref-code">${g.id}</td>
-                <td class="ref-desc">${g.tipo}</td>
-                <td style="text-align:right;font-size:11px;">${fmtNum(g.totalHojas)}</td>
-                <td style="text-align:right;font-size:11px;color:#9ca3af;">${fmtNum(Math.round(g.totalKilos))}</td>
-                <td style="text-align:right;font-size:11px;">
+                <td class="ref-code">${esc(g.id)}</td>
+                <td class="ref-desc">${esc(g.tipo)}</td>
+                <td class="text-right mono-sm">${fmtNum(g.totalHojas)}</td>
+                <td class="text-right mono-sm" style="color:#9ca3af;">${fmtNum(Math.round(g.totalKilos))}</td>
+                <td class="text-right mono-sm">
                     <span style="${isCustom?'color:var(--accent);font-weight:700;':'color:#6b7280;'}">${fmtNum(kgPP)}</span>
                 </td>
-                <td style="text-align:center;"><span class="pal-badge">${palEst}</span></td>
+                <td class="text-center"><span class="pal-badge">${palEst}</span></td>
             </tr>`;
         });
         html += `</tbody></table>`;
@@ -291,31 +303,34 @@ function showInspector(aisleData) {
 
     html += `</div>`;
     panel.innerHTML = html;
+    panel.querySelector('[data-action="edit"]')?.addEventListener('click', () => openEditModal(aisleData.id));
+    panel.querySelector('[data-action="toggle"]')?.addEventListener('click', () => toggleAisleDisabled(aisleData.id));
+    panel.querySelector('[data-action="close"]')?.addEventListener('click', closeInspector);
     panel.classList.add('visible');
 }
 
 // ─── TOGGLE ANULAR ────────────────────────────────────────────────────────────
-window.toggleAisleDisabled = function(id) {
+function toggleAisleDisabled(id) {
     const cfg = getAisleCfg(id);
     cfg.disabled = !cfg.disabled;
     saveAisleConfig();
     addLog(cfg.disabled ? 'disable' : 'enable', `Pasillo ${cfg.disabled?'anulado':'reactivado'}: P${id}`, id);
     renderWarehouse();
     showInspector(allAislesData[id]);
-};
+}
 
 // ─── MODAL EDICIÓN PASILLO ────────────────────────────────────────────────────
-window.openEditModal = function(id) {
+function openEditModal(id) {
     const aisle = allAislesData[id];
     const cfg   = getAisleCfg(id);
     const cap   = cfg.capacity || aisle.capacity;
 
     const modal = document.getElementById('edit-modal');
     modal.innerHTML = `
-        <div class="edit-modal-box" onclick="event.stopPropagation()">
+        <div class="edit-modal-box">
             <div class="edit-modal-header">
                 <h3><i class="ri-settings-3-line"></i> Configurar Pasillo ${id}</h3>
-                <button class="insp-action-btn btn-close" onclick="window.closeEditModal()"><i class="ri-close-line"></i></button>
+                <button class="insp-action-btn btn-close" data-action="close"><i class="ri-close-line"></i></button>
             </div>
             <div class="edit-modal-body">
                 <div class="edit-section">
@@ -329,32 +344,37 @@ window.openEditModal = function(id) {
                 </div>
             </div>
             <div class="edit-modal-footer">
-                <button class="btn-secondary" onclick="window.resetAisleCfg('${id}')"><i class="ri-refresh-line"></i> Restaurar</button>
-                <button class="btn-primary" onclick="window.saveEditModal('${id}')"><i class="ri-save-line"></i> Guardar</button>
+                <button class="btn-secondary" data-action="reset"><i class="ri-refresh-line"></i> Restaurar</button>
+                <button class="btn-primary" data-action="save"><i class="ri-save-line"></i> Guardar</button>
             </div>
         </div>`;
+    // Stop propagation on the box to prevent modal backdrop click from closing
+    modal.querySelector('.edit-modal-box')?.addEventListener('click', e => e.stopPropagation());
+    modal.querySelector('[data-action="close"]')?.addEventListener('click', closeEditModal);
+    modal.querySelector('[data-action="reset"]')?.addEventListener('click', () => resetAisleCfg(id));
+    modal.querySelector('[data-action="save"]')?.addEventListener('click', () => saveEditModal(id));
     modal.classList.add('visible');
-};
-window.closeEditModal = function() { document.getElementById('edit-modal').classList.remove('visible'); };
-window.saveEditModal = function(id) {
+}
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('visible'); }
+function saveEditModal(id) {
     const cfg = getAisleCfg(id);
     const v   = parseInt(document.getElementById('edit-capacity').value);
     if (v > 0) cfg.capacity = v;
     saveAisleConfig();
     addLog('edit', `P${id} — capacidad actualizada a ${v}`, id);
-    window.closeEditModal();
+    closeEditModal();
     renderWarehouse();
     showInspector(allAislesData[id]);
-};
-window.resetAisleCfg = function(id) {
+}
+function resetAisleCfg(id) {
     if (!confirm(`¿Restaurar configuración por defecto del pasillo ${id}?`)) return;
     delete aisleConfig[id];
     saveAisleConfig();
     addLog('edit', `P${id} — restaurado`, id);
-    window.closeEditModal();
+    closeEditModal();
     renderWarehouse();
     showInspector(allAislesData[id]);
-};
+}
 
 // ─── BÚSQUEDA CON AUTOCOMPLETADO ──────────────────────────────────────────────
 function setupSearch() {
@@ -368,7 +388,7 @@ function setupSearch() {
         if (clearBtn) clearBtn.style.display = 'none';
         hideDropdown();
         document.querySelectorAll('.aisle-unit').forEach(el => { el.style.opacity = '1'; el.style.outline = ''; });
-        window.closeInspector();
+        closeInspector();
         inp.focus();
     }
     if (clearBtn) clearBtn.addEventListener('click', clearSearch);
@@ -384,8 +404,8 @@ function setupSearch() {
             const aisleList = r.aisles.map(a => `<span class="dd-aisle-tag dd-aisle-link" data-aisle="${a}">P${a}</span>`).join('');
             item.innerHTML = `
                 <div class="dd-main">
-                    <span class="dd-tipo">${r.tipo}</span>
-                    <span class="dd-code">${r.id}</span>
+                    <span class="dd-tipo">${esc(r.tipo)}</span>
+                    <span class="dd-code">${esc(r.id)}</span>
                 </div>
                 <div class="dd-meta">
                     <span class="dd-kilos">${fmtNum(Math.round(r.totalKilos))} kg · ${r.palets.toFixed(1)} pal. total</span>
@@ -486,8 +506,8 @@ function showArticleCard(ref) {
         const aisle = allAislesData[aid];
         if (!aisle) return null;
         const items = (aisle.items || []).filter(it => it.id === ref.id);
-        const kg    = items.reduce((s, it) => s + Math.max(0, it.hojas || 0), 0);
-        const hojas = items.reduce((s, it) => s + Math.max(0, it.kilos || 0), 0);
+        const kg    = items.reduce((s, it) => s + Math.max(0, it.kilos || 0), 0);
+        const hojas = items.reduce((s, it) => s + Math.max(0, it.hojas || 0), 0);
         const pal   = kg / kgPP;
         const cap   = getCapacity(aisle);
         const occ   = (calcPalets(aisle.items) / cap) * 100;
@@ -497,20 +517,20 @@ function showArticleCard(ref) {
     let html = `
         <div class="inspector-header">
             <div style="flex:1;min-width:0;">
-                <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px;">
+                <div class="section-label" style="margin-bottom:4px;">
                     <i class="ri-archive-2-line"></i> FICHA DE ARTÍCULO
                 </div>
-                <h3 class="insp-title" style="font-size:13px;line-height:1.35;">${ref.tipo}</h3>
+                <h3 class="insp-title" style="font-size:13px;line-height:1.35;">${esc(ref.tipo)}</h3>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center;">
-                    <span class="insp-badge" style="background:rgba(99,102,241,0.12);color:var(--accent);">${ref.id}</span>
-                    ${ref.gramaje ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">${ref.gramaje}</span>` : ''}
-                    ${ref.proveedor ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">${ref.proveedor}</span>` : ''}
+                    <span class="insp-badge" style="background:rgba(99,102,241,0.12);color:var(--accent);">${esc(ref.id)}</span>
+                    ${ref.gramaje ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">${esc(ref.gramaje)}</span>` : ''}
+                    ${ref.proveedor ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">${esc(ref.proveedor)}</span>` : ''}
                     <span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">
                         ${isCustom ? `<span style="color:var(--accent);font-weight:700;">${fmtNum(kgPP)}</span>` : fmtNum(kgPP)} kg/palet
                     </span>
                 </div>
             </div>
-            <button class="insp-action-btn btn-close" onclick="window.closeInspector()" title="Cerrar"><i class="ri-close-line"></i></button>
+            <button class="insp-action-btn btn-close" data-action="close" title="Cerrar"><i class="ri-close-line"></i></button>
         </div>
 
         <!-- Totales -->
@@ -535,15 +555,15 @@ function showArticleCard(ref) {
 
         <!-- Desglose por pasillo -->
         <div class="items-list-container">
-            <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px;">
+            <div class="section-label" style="margin-bottom:8px;">
                 Distribución por pasillo
             </div>
             <table class="items-table">
                 <thead><tr>
                     <th>Pasillo</th>
-                    <th style="text-align:right">Kg</th>
-                    <th style="text-align:right">Pliegos</th>
-                    <th style="text-align:right">Pal. est.</th>
+                    <th class="text-right">Kg</th>
+                    <th class="text-right">Pliegos</th>
+                    <th class="text-right">Pal. est.</th>
                     <th>Ocup. pasillo</th>
                 </tr></thead>
                 <tbody>`;
@@ -551,14 +571,14 @@ function showArticleCard(ref) {
     aisleBreakdown.forEach(row => {
         const col  = getHeatmapColorHex(row.occ);
         const pct  = Math.round(row.occ);
-        html += `<tr style="cursor:pointer;" onclick="window.goToAisleFromCard('${row.aid}')">
+        html += `<tr style="cursor:pointer;" data-aisle="${row.aid}">
             <td>
                 <span class="dd-aisle-tag" style="cursor:pointer;">P${row.aid}</span>
                 ${row.disabled ? '<span style="color:#6b7280;font-size:10px;margin-left:4px;">anulado</span>' : ''}
             </td>
-            <td style="text-align:right;font-family:var(--font-mono);font-size:11px;">${fmtNum(Math.round(row.kg))}</td>
-            <td style="text-align:right;font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">${fmtNum(row.hojas)}</td>
-            <td style="text-align:right;">
+            <td class="text-right mono-sm">${fmtNum(Math.round(row.kg))}</td>
+            <td class="text-right mono-sm c-muted">${fmtNum(row.hojas)}</td>
+            <td class="text-right">
                 <span class="pal-badge">${row.pal.toFixed(1)}</span>
             </td>
             <td>
@@ -574,11 +594,15 @@ function showArticleCard(ref) {
 
     html += `</tbody></table></div>`;
     panel.innerHTML = html;
+    panel.querySelector('[data-action="close"]')?.addEventListener('click', closeInspector);
+    panel.querySelectorAll('tr[data-aisle]').forEach(tr => {
+        tr.addEventListener('click', () => goToAisleFromCard(tr.dataset.aisle));
+    });
     panel.classList.add('visible');
 }
 
-window.goToAisleFromCard = function(id) {
-    window.closeInspector();
+function goToAisleFromCard(id) {
+    closeInspector();
     setTimeout(() => {
         // Cambiar a vista mapa si no estamos en ella
         const mapBtn = document.querySelector('[data-view="map"]');
@@ -593,7 +617,7 @@ window.goToAisleFromCard = function(id) {
             }
         }, 80);
     }, 50);
-};
+}
 
 // ─── NAVEGACIÓN ───────────────────────────────────────────────────────────────
 function setupNavigation() {
@@ -609,7 +633,7 @@ function setupNavigation() {
             if (view === 'metrics')  renderMetrics();
             if (view === 'history')  renderHistory();
             if (view === 'articles') renderArticles();
-            window.closeInspector();
+            closeInspector();
         });
     });
     document.getElementById('view-map').style.display      = 'flex';
@@ -644,24 +668,32 @@ function renderMetrics() {
         return { id:a.id, pal, occ };
     }).filter(a=>a.pal>0).sort((a,b)=>b.occ-a.occ).slice(0,15);
     const maxPal = Math.max(...sorted.map(a=>a.pal),1);
-    document.getElementById('metrics-top-body').innerHTML = sorted.map(a => {
+    const topBody = document.getElementById('metrics-top-body');
+    topBody.innerHTML = sorted.map(a => {
         const c = getHeatmapColorHex(a.occ);
-        return `<div class="top-list-row" onclick="goToAisle('${a.id}')">
+        return `<div class="top-list-row" data-aisle="${a.id}">
             <span class="row-id">P${a.id}</span>
             <div class="row-bar-wrap"><div class="row-bar" style="width:${Math.min((a.pal/maxPal)*100,100)}%;background:${c};"></div></div>
             <span class="row-palets">${a.pal} pal.</span>
             <span class="row-pct" style="color:${c};">${a.occ}%</span>
         </div>`;
     }).join('');
+    if (!topBody._delegated) {
+        topBody.addEventListener('click', e => {
+            const row = e.target.closest('.top-list-row[data-aisle]');
+            if (row) goToAisle(row.dataset.aisle);
+        });
+        topBody._delegated = true;
+    }
 }
 
-window.goToAisle = function(id) {
+function goToAisle(id) {
     document.querySelector('[data-view="map"]').click();
     setTimeout(() => {
         const el = document.querySelector(`.aisle-unit[data-id="${id}"]`);
         if (el) { document.querySelectorAll('.aisle-unit.active').forEach(a=>a.classList.remove('active')); el.classList.add('active'); el.scrollIntoView({behavior:'smooth',block:'center'}); showInspector(allAislesData[id]); }
     }, 100);
-};
+}
 
 // ─── VISTA ARTÍCULOS ──────────────────────────────────────────────────────────
 let articleSortCol = 'totalKilos', articleSortDir = -1, articleSearch = '';
@@ -691,7 +723,7 @@ function renderArticles() {
     const thead = (col, label, align='left') => {
         const active = articleSortCol === col;
         const icon   = active ? (articleSortDir === 1 ? '↑' : '↓') : '';
-        return `<th class="art-th ${active?'active':''}" style="text-align:${align};cursor:pointer;" onclick="window.artSort('${col}')">${label} ${icon}</th>`;
+        return `<th class="art-th ${active?'active':''}" style="text-align:${align};cursor:pointer;" data-sort="${col}">${label} ${icon}</th>`;
     };
 
     const container = document.getElementById('view-articles');
@@ -704,7 +736,7 @@ function renderArticles() {
                     <i class="ri-search-line" style="color:var(--text-muted);font-size:13px;"></i>
                     <input type="text" id="art-search-input" class="art-search-input" placeholder="Filtrar artículos..." value="${articleSearch}">
                 </div>
-                <button class="btn-secondary" style="font-size:11px;padding:5px 10px;" onclick="window.importArticleConfig()" title="Importar kg/palet desde Excel">
+                <button class="btn-secondary" style="font-size:11px;padding:5px 10px;" data-action="import" title="Importar kg/palet desde Excel">
                     <i class="ri-upload-2-line"></i> Importar Excel
                 </button>
                 <input type="file" id="art-excel-input" accept=".xls,.xlsx" style="display:none">
@@ -719,36 +751,35 @@ function renderArticles() {
                 ${thead('gramaje','Gramaje')}
                 ${thead('totalKilos','Kg totales','right')}
                 ${thead('palets','Palets est.','right')}
-                <th style="text-align:right;">Kg/palet</th>
-                <th style="text-align:center;">Pasillos</th>
+                <th class="text-right">Kg/palet</th>
+                <th class="text-center">Pasillos</th>
             </tr></thead>
             <tbody>`;
 
     rows.forEach(r => {
         const kgPP     = getKgPerPalet(r.id);
         const isCustom = !!(articleConfig[r.id] && articleConfig[r.id].kgPerPalet > 0);
-        const aislesHtml = r.aisles.slice(0,5).map(a => `<span class="dd-aisle-tag" style="cursor:pointer;" onclick="window.goToAisle('${a}')" title="Ir al pasillo ${a}">P${a}</span>`).join('');
+        const aislesHtml = r.aisles.slice(0,5).map(a => `<span class="dd-aisle-tag" style="cursor:pointer;" data-aisle="${a}" title="Ir al pasillo ${a}">P${a}</span>`).join('');
         const moreAisles = r.aisles.length > 5 ? `<span style="color:var(--text-muted);font-size:10px;">+${r.aisles.length-5}</span>` : '';
 
         html += `<tr class="art-row">
-            <td style="font-size:12px;line-height:1.35;">${r.tipo}</td>
-            <td class="ref-code">${r.id}</td>
-            <td style="font-size:11px;color:var(--text-muted);">${r.proveedor}</td>
-            <td style="font-size:11px;color:var(--text-muted);">${r.gramaje}</td>
-            <td style="text-align:right;font-family:var(--font-mono);font-size:11px;">${fmtNum(Math.round(r.totalKilos))}</td>
-            <td style="text-align:right;font-family:var(--font-mono);font-size:11px;">${r.palets.toFixed(1)}</td>
-            <td style="text-align:right;">
+            <td style="font-size:12px;line-height:1.35;">${esc(r.tipo)}</td>
+            <td class="ref-code">${esc(r.id)}</td>
+            <td class="mono-sm c-muted">${esc(r.proveedor)}</td>
+            <td class="mono-sm c-muted">${esc(r.gramaje)}</td>
+            <td class="text-right mono-sm">${fmtNum(Math.round(r.totalKilos))}</td>
+            <td class="text-right mono-sm">${r.palets.toFixed(1)}</td>
+            <td class="text-right">
                 <div class="kgpal-cell">
                     <input type="number" min="1" max="99999"
                            class="kgpal-input ${isCustom?'kgpal-custom':''}"
-                           data-ref="${r.id}"
+                           data-ref="${esc(r.id)}"
                            value="${isCustom ? kgPP : ''}"
                            placeholder="600"
-                           onchange="window.saveKgPal('${r.id}', this.value)"
                            onclick="event.stopPropagation()">
                 </div>
             </td>
-            <td style="text-align:center;">
+            <td class="text-center">
                 <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;">${aislesHtml}${moreAisles}</div>
             </td>
         </tr>`;
@@ -756,6 +787,23 @@ function renderArticles() {
 
     html += `</tbody></table></div>`;
     container.innerHTML = html;
+
+    // Delegation for clicks (sort headers, aisle tags, import button)
+    if (!container._delegated) {
+        container.addEventListener('click', e => {
+            const th = e.target.closest('.art-th[data-sort]');
+            if (th) { artSort(th.dataset.sort); return; }
+            const tag = e.target.closest('.dd-aisle-tag[data-aisle]');
+            if (tag) { e.stopPropagation(); goToAisle(tag.dataset.aisle); return; }
+            const imp = e.target.closest('[data-action="import"]');
+            if (imp) { importArticleConfig(); return; }
+        });
+        container.addEventListener('change', e => {
+            const inp = e.target.closest('.kgpal-input[data-ref]');
+            if (inp) saveKgPal(inp.dataset.ref, inp.value);
+        });
+        container._delegated = true;
+    }
 
     // Search en artículos
     const artInp = document.getElementById('art-search-input');
@@ -773,13 +821,13 @@ function renderArticles() {
     if (fileInp) fileInp.addEventListener('change', handleExcelImport);
 }
 
-window.artSort = function(col) {
+function artSort(col) {
     if (articleSortCol === col) articleSortDir *= -1;
     else { articleSortCol = col; articleSortDir = -1; }
     renderArticles();
-};
+}
 
-window.saveKgPal = function(refId, val) {
+function saveKgPal(refId, val) {
     const n = parseFloat(val);
     if (n > 0) {
         getArticleCfg(refId).kgPerPalet = n;
@@ -788,6 +836,7 @@ window.saveKgPal = function(refId, val) {
         delete articleConfig[refId];
     }
     saveArticleConfig();
+    invalidateCatalog();
     renderWarehouse();
     // Actualizar el input visualmente
     const inp = document.querySelector(`.kgpal-input[data-ref="${refId}"]`);
@@ -795,7 +844,7 @@ window.saveKgPal = function(refId, val) {
 };
 
 // ─── IMPORTAR EXCEL ───────────────────────────────────────────────────────────
-window.importArticleConfig = function() {
+function importArticleConfig() {
     document.getElementById('art-excel-input').click();
 };
 
@@ -843,6 +892,7 @@ async function handleExcelImport(e) {
     });
 
     saveArticleConfig();
+    invalidateCatalog();
     renderWarehouse();
     renderArticles();
     addLog('sync', `Excel importado: ${updated} kg/palet actualizados, ${skipped} filas ignoradas`);
@@ -874,7 +924,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderWarehouse();
     setupSearch();
     setupNavigation();
-    document.getElementById('edit-modal').addEventListener('click', () => window.closeEditModal());
+    document.getElementById('edit-modal').addEventListener('click', () => closeEditModal());
 
     if (window.firebaseDb) {
         const statusEl = document.querySelector('.status-indicator');
@@ -912,6 +962,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         allAislesData[id].items = next;
                     }
                 });
+                invalidateCatalog();
                 statusEl.textContent = 'En vivo (Firestore)';
                 renderWarehouse();
                 const active = document.querySelector('.aisle-unit.active');
