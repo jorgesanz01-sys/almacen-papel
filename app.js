@@ -49,7 +49,7 @@ function getKgPerPalet(refId) {
 function calcTotalKilos(items) {
     if (!items || !items.length) return 0;
     return items.reduce((s, it) => {
-        const kg = Math.max(0, it.hojas || 0);
+        const kg = Math.max(0, it.kilos || 0);
         return s + kg;
     }, 0);
 }
