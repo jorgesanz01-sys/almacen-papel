@@ -18,13 +18,16 @@
             <h1>Store<span class="highlight">Map</span></h1>
         </div>
 
-        <!-- BÚSQUEDA movida a sidebar -->
-        <div class="sidebar-search">
-            <i class="ri-search-line"></i>
-            <input type="text" id="search-input" placeholder="Ref., tipo, pasillo...">
-            <button id="search-clear" class="search-clear-btn" style="display:none" title="Limpiar">
-                <i class="ri-close-line"></i>
-            </button>
+        <!-- BÚSQUEDA con autocompletado -->
+        <div class="sidebar-search-wrap">
+            <div class="sidebar-search">
+                <i class="ri-search-line"></i>
+                <input type="text" id="search-input" placeholder="Ref., tipo, pasillo..." autocomplete="off">
+                <button id="search-clear" class="search-clear-btn" style="display:none" title="Limpiar">
+                    <i class="ri-close-line"></i>
+                </button>
+            </div>
+            <div id="search-dropdown" class="search-dropdown" style="display:none"></div>
         </div>
 
         <nav class="nav-menu">
@@ -33,6 +36,9 @@
             </button>
             <button class="nav-item" data-view="metrics">
                 <i class="ri-bar-chart-2-fill"></i> Métricas
+            </button>
+            <button class="nav-item" data-view="articles">
+                <i class="ri-archive-2-line"></i> Artículos
             </button>
             <button class="nav-item" data-view="history">
                 <i class="ri-history-line"></i> Historial
@@ -60,19 +66,18 @@
     <!-- ── MAIN ── -->
     <main class="main-content">
 
-        <!-- Top bar -->
         <header class="top-bar glass-panel">
             <div class="user-profile">
                 <button id="force-sync-btn" class="filter-btn"
-                        style="background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.3); color:#fca5a5;">
+                        style="background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.3);color:#fca5a5;">
                     <i class="ri-refresh-line"></i> Forzar Recarga Excel
                 </button>
-                <div class="status-indicator live">En vivo (Firestore)</div>
+                <div class="status-indicator">En vivo (Firestore)</div>
                 <div class="avatar"><i class="ri-user-smile-fill"></i></div>
             </div>
         </header>
 
-        <!-- ══ VISTA: MAPA ══ -->
+        <!-- MAPA -->
         <div class="warehouse-canvas glass-panel" id="view-map">
             <div class="canvas-header">
                 <h2>Plano del Almacén</h2>
@@ -85,50 +90,46 @@
             <div class="warehouse-grid" id="warehouse-grid"></div>
         </div>
 
-        <!-- ══ VISTA: MÉTRICAS ══ -->
-        <div class="warehouse-canvas glass-panel view-panel" id="view-metrics">
+        <!-- MÉTRICAS -->
+        <div class="warehouse-canvas glass-panel view-panel" id="view-metrics" style="display:none">
             <div class="canvas-header" style="flex-shrink:0;">
                 <h2>Métricas del Almacén</h2>
             </div>
-
-            <!-- KPIs -->
             <div class="metrics-grid" id="metrics-kpis"></div>
-
-            <!-- Top 10 más llenos -->
-            <div class="top-list" id="metrics-top" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+            <div class="top-list" id="metrics-top" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
                 <div class="top-list-header">Top pasillos por ocupación</div>
-                <div style="flex:1; overflow-y:auto;" id="metrics-top-body"></div>
+                <div style="flex:1;overflow-y:auto;" id="metrics-top-body"></div>
             </div>
         </div>
 
-        <!-- ══ VISTA: HISTORIAL ══ -->
-        <div class="warehouse-canvas glass-panel view-panel" id="view-history">
+        <!-- ARTÍCULOS -->
+        <div class="warehouse-canvas glass-panel view-panel" id="view-articles" style="display:none"></div>
+
+        <!-- HISTORIAL -->
+        <div class="warehouse-canvas glass-panel view-panel" id="view-history" style="display:none">
             <div class="canvas-header" style="flex-shrink:0;">
                 <h2>Historial de Actividad</h2>
             </div>
-            <div class="history-list" id="history-list" style="flex:1; overflow-y:auto;"></div>
+            <div class="history-list" id="history-list" style="flex:1;overflow-y:auto;"></div>
         </div>
 
     </main>
 </div>
 
-<!-- Inspector panel -->
+<!-- Inspector -->
 <div id="inspector-panel" class="inspector-panel"></div>
-
-<!-- Modal edición de pasillo -->
+<!-- Modal edición pasillo -->
 <div id="edit-modal"></div>
 
-<!-- Firebase SDK -->
+<!-- Firebase -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
     import { getFirestore, collection, doc, onSnapshot, setDoc, getDocs }
         from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
-
     const firebaseConfig = {
         databaseURL: "https://almacen-papel-default-rtdb.europe-west1.firebasedatabase.app/",
         projectId: "almacen-papel"
     };
-
     try {
         const app = initializeApp(firebaseConfig);
         window.firebaseDb         = getFirestore(app);
@@ -137,10 +138,7 @@
         window.firebaseOnSnapshot = onSnapshot;
         window.firebaseSetDoc     = setDoc;
         window.firebaseGetDocs    = getDocs;
-        console.log("Firestore initialized");
-    } catch(e) {
-        console.error("Error initializing Firestore", e);
-    }
+    } catch(e) { console.error("Firebase error", e); }
 </script>
 <script type="module" src="app.js"></script>
 </body>

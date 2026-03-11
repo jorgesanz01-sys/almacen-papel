@@ -17,69 +17,84 @@ const WAREHOUSE_LAYOUT = [
     ]}
 ];
 
-const allAislesData = {};  // id → { id, capacity, items[], blockId, disabled, customKgPerPalet }
+const allAislesData = {};
 let totalGlobalCapacity = 0;
 let localSeedData = {};
 let globalClickListenerAttached = false;
 const activityLog = [];
 
-// Configuraciones locales que NO van al seed (persisten en localStorage)
-let aisleConfig = {};  // id → { disabled: bool, capacity: num, kgPerPalet: { refId: num } }
+// ─── CONFIG LOCAL (localStorage) ─────────────────────────────────────────────
+// aisleConfig[aisleId] = { disabled, capacity }
+// articleConfig[refId] = { kgPerPalet }  ← ahora por artículo, no por pasillo
+let aisleConfig   = {};
+let articleConfig = {};  // refId → { kgPerPalet: number, notes: string }
 
-function loadAisleConfig() {
-    try { aisleConfig = JSON.parse(localStorage.getItem('sm_aisleConfig') || '{}'); }
-    catch(e) { aisleConfig = {}; }
+function loadConfig() {
+    try { aisleConfig   = JSON.parse(localStorage.getItem('sm_aisleConfig')   || '{}'); } catch(e) { aisleConfig   = {}; }
+    try { articleConfig = JSON.parse(localStorage.getItem('sm_articleConfig') || '{}'); } catch(e) { articleConfig = {}; }
 }
-function saveAisleConfig() {
-    localStorage.setItem('sm_aisleConfig', JSON.stringify(aisleConfig));
-}
-function getAisleCfg(id) {
-    if (!aisleConfig[id]) aisleConfig[id] = {};
-    return aisleConfig[id];
-}
+function saveAisleConfig()   { localStorage.setItem('sm_aisleConfig',   JSON.stringify(aisleConfig));   }
+function saveArticleConfig() { localStorage.setItem('sm_articleConfig', JSON.stringify(articleConfig)); }
+function getAisleCfg(id)   { if (!aisleConfig[id])   aisleConfig[id]   = {}; return aisleConfig[id]; }
+function getArticleCfg(id) { if (!articleConfig[id]) articleConfig[id] = {}; return articleConfig[id]; }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
-function calcTotalKilos(items, aisleId) {
+function getKgPerPalet(refId) {
+    return (articleConfig[refId] && articleConfig[refId].kgPerPalet > 0)
+        ? articleConfig[refId].kgPerPalet
+        : 600;
+}
+
+function calcTotalKilos(items) {
     if (!items || !items.length) return 0;
-    const cfg = aisleConfig[aisleId] || {};
-    const kgMap = cfg.kgPerPalet || {};
     return items.reduce((s, it) => {
         const kg = Math.max(0, it.kilos || 0);
-        // Si hay un kg/palet personalizado para esta ref, recalcula
-        if (kgMap[it.id] && kgMap[it.id] > 0) {
-            // Estimamos palets de este item y los convertimos a kg con la escala correcta
-            const originalKgPerPalet = 600;
-            const origPalets = kg / originalKgPerPalet;
-            return s + origPalets * kgMap[it.id];
-        }
         return s + kg;
     }, 0);
 }
 
+// Palets reales usando kg/palet de la config de artículo
+function calcPalets(items) {
+    if (!items || !items.length) return 0;
+    return items.reduce((s, it) => {
+        const kg = Math.max(0, it.kilos || 0);
+        return s + (kg / getKgPerPalet(it.id));
+    }, 0);
+}
+
 function getCapacity(aisle) {
-    const cfg = aisleConfig[aisle.id] || {};
-    return cfg.capacity || aisle.capacity;
+    return (aisleConfig[aisle.id] && aisleConfig[aisle.id].capacity) || aisle.capacity;
 }
-
-function isDisabled(aisle) {
-    return !!(aisleConfig[aisle.id] || {}).disabled;
-}
-
-function getHeatmapClass(r) {
-    if (r < 30) return 'empty';
-    if (r <= 75) return 'medium';
-    return 'full';
-}
-function getHeatmapColorHex(r) {
-    if (r < 30) return '#22c55e';
-    if (r <= 75) return '#f59e0b';
-    return '#ef4444';
-}
+function isDisabled(aisle) { return !!(aisleConfig[aisle.id] || {}).disabled; }
+function getHeatmapClass(r) { return r < 30 ? 'empty' : r <= 75 ? 'medium' : 'full'; }
+function getHeatmapColorHex(r) { return r < 30 ? '#22c55e' : r <= 75 ? '#f59e0b' : '#ef4444'; }
 function fmtNum(n) { return Number(n).toLocaleString('es-ES'); }
+
+// ─── CATÁLOGO GLOBAL DE ARTÍCULOS ─────────────────────────────────────────────
+// Construye un mapa refId → { id, tipo, gramaje, proveedor, totalKilos, palets, aisles[] }
+function buildCatalog() {
+    const cat = {};
+    Object.values(allAislesData).forEach(aisle => {
+        (aisle.items || []).forEach(it => {
+            if (!cat[it.id]) cat[it.id] = {
+                id: it.id, tipo: it.tipo || '', gramaje: it.gramaje || '',
+                proveedor: it.proveedor || '', totalKilos: 0, totalHojas: 0,
+                palets: 0, aisles: new Set()
+            };
+            cat[it.id].totalKilos += Math.max(0, it.kilos || 0);
+            cat[it.id].totalHojas += Math.max(0, it.hojas  || 0);
+            cat[it.id].palets     += Math.max(0, it.kilos || 0) / getKgPerPalet(it.id);
+            cat[it.id].aisles.add(aisle.id);
+        });
+    });
+    // Convertir sets a arrays
+    Object.values(cat).forEach(a => { a.aisles = [...a.aisles].sort(); });
+    return cat;
+}
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 async function initMockData() {
-    loadAisleConfig();
+    loadConfig();
     try {
         const resp = await fetch('./seed.json');
         if (resp.ok) localSeedData = await resp.json();
@@ -89,7 +104,7 @@ async function initMockData() {
         if (block.type === 'empty') return;
         const list = [];
         if (block.isExternal) {
-            const id = block.extId;
+            const id  = block.extId;
             const obj = { id, capacity: 500, items: localSeedData[id]?.items || [], blockId: block.id };
             list.push(obj); allAislesData[id] = obj; totalGlobalCapacity += 500;
         } else {
@@ -126,23 +141,17 @@ function renderWarehouse() {
             block.aisles.forEach(aisle => {
                 const disabled = isDisabled(aisle);
                 const cap = getCapacity(aisle);
-                const kg  = calcTotalKilos(aisle.items, aisle.id);
-                const pal = parseFloat((kg / 600).toFixed(1));
-
+                const pal = parseFloat(calcPalets(aisle.items).toFixed(1));
                 if (!disabled) { totalFilled += pal; totalCap += cap; }
-
                 const occ  = cap > 0 ? (pal / cap) * 100 : 0;
                 const heat = disabled ? 'disabled' : getHeatmapClass(occ);
-
                 html += `
-                    <div class="rack aisle-unit ${heat}"
-                         data-id="${aisle.id}"
-                         title="${disabled ? '⛔ Pasillo anulado' : `P${aisle.id} · ${pal} pal. · ${Math.round(occ)}%`}">
-                        ${disabled ? '<i class="ri-forbid-line" style="font-size:11px; color:#6b7280; z-index:1;"></i>' : ''}
-                        <span class="rack-id" style="${disabled ? 'color:#4b5563;' : ''}">${aisle.id}</span>
-                        <span class="aisle-badge" style="${disabled ? 'color:#374151;' : ''}">${disabled ? 'anulado' : pal + ' pal.'}</span>
-                    </div>
-                `;
+                    <div class="rack aisle-unit ${heat}" data-id="${aisle.id}"
+                         title="${disabled ? '⛔ Anulado' : `P${aisle.id} · ${pal} pal. · ${Math.round(occ)}%`}">
+                        ${disabled ? '<i class="ri-forbid-line" style="font-size:10px;color:#4b5563;z-index:1;"></i>' : ''}
+                        <span class="rack-id" style="${disabled?'color:#4b5563;':''}">${aisle.id}</span>
+                        <span class="aisle-badge" style="${disabled?'color:#374151;':''}">${disabled ? 'anulado' : pal+' pal.'}</span>
+                    </div>`;
             });
 
             html += '</div>';
@@ -160,6 +169,7 @@ function updateGlobalMetrics(filled, total) {
     const rate = total === 0 ? 0 : (filled / total) * 100;
     const el   = document.getElementById('global-ocupation');
     const bar  = document.getElementById('global-progress');
+    if (!el || !bar) return;
     el.textContent = `${Math.round(rate)}%`;
     bar.style.width = `${Math.min(rate, 100)}%`;
     const c = getHeatmapColorHex(rate);
@@ -181,7 +191,7 @@ function attachAisleListeners() {
     });
     if (!globalClickListenerAttached) {
         document.addEventListener('click', e => {
-            if (!e.target.closest('.aisle-unit') && !e.target.closest('#inspector-panel') && !e.target.closest('#edit-modal')) {
+            if (!e.target.closest('.aisle-unit') && !e.target.closest('#inspector-panel') && !e.target.closest('#edit-modal') && !e.target.closest('#search-dropdown')) {
                 closeInspector();
             }
         });
@@ -196,18 +206,16 @@ window.closeInspector = function() {
 };
 
 function showInspector(aisleData) {
-    const panel = document.getElementById('inspector-panel');
+    const panel    = document.getElementById('inspector-panel');
     panel.className = 'inspector-panel';
 
     const disabled = isDisabled(aisleData);
     const cap = getCapacity(aisleData);
-    const kg  = calcTotalKilos(aisleData.items, aisleData.id);
-    const pal = parseFloat((kg / 600).toFixed(1));
+    const pal = parseFloat(calcPalets(aisleData.items).toFixed(1));
     const occ = cap > 0 ? (pal / cap) * 100 : 0;
     const col = disabled ? '#6b7280' : getHeatmapColorHex(occ);
-    const n   = aisleData.items ? aisleData.items.length : 0;
 
-    // Agrupar items
+    // Agrupar items por ref
     const grouped = {};
     (aisleData.items || []).forEach(it => {
         if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0, totalHojas: 0 };
@@ -216,10 +224,9 @@ function showInspector(aisleData) {
     });
     const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
 
-    // Cabecera de estado
     const statusBadge = disabled
-        ? `<span class="insp-badge" style="background:#374151; color:#9ca3af;">⛔ Pasillo Anulado — no cuenta en métricas</span>`
-        : `<span class="insp-badge" style="background:${col}22; color:${col};">${Math.round(occ)}% · ${pal} / ${cap} pal.</span>`;
+        ? `<span class="insp-badge" style="background:#374151;color:#9ca3af;">⛔ Pasillo Anulado — no cuenta en métricas</span>`
+        : `<span class="insp-badge" style="background:${col}22;color:${col};">${Math.round(occ)}% · ${pal} / ${cap} pal.</span>`;
 
     let html = `
         <div class="inspector-header">
@@ -227,55 +234,37 @@ function showInspector(aisleData) {
                 <h3 class="insp-title">Pasillo ${aisleData.id}</h3>
                 ${statusBadge}
             </div>
-            <div style="display:flex; gap:6px; align-items:flex-start;">
-                <button class="insp-action-btn" onclick="window.openEditModal('${aisleData.id}')" title="Editar configuración">
-                    <i class="ri-settings-3-line"></i>
-                </button>
-                <button class="insp-action-btn ${disabled ? 'btn-enable' : 'btn-disable'}"
-                        onclick="window.toggleAisleDisabled('${aisleData.id}')"
-                        title="${disabled ? 'Activar pasillo' : 'Anular pasillo'}">
-                    <i class="ri-${disabled ? 'checkbox-circle-line' : 'forbid-line'}"></i>
-                </button>
-                <button class="insp-action-btn btn-close" onclick="window.closeInspector()" title="Cerrar">
-                    <i class="ri-close-line"></i>
-                </button>
+            <div style="display:flex;gap:6px;align-items:flex-start;">
+                <button class="insp-action-btn" onclick="window.openEditModal('${aisleData.id}')" title="Editar configuración"><i class="ri-settings-3-line"></i></button>
+                <button class="insp-action-btn ${disabled?'btn-enable':'btn-disable'}" onclick="window.toggleAisleDisabled('${aisleData.id}')" title="${disabled?'Activar':'Anular'}"><i class="ri-${disabled?'checkbox-circle-line':'forbid-line'}"></i></button>
+                <button class="insp-action-btn btn-close" onclick="window.closeInspector()" title="Cerrar"><i class="ri-close-line"></i></button>
             </div>
         </div>
-        <div class="items-list-container">
-    `;
+        <div class="items-list-container">`;
 
     if (rows.length > 0) {
-        const cfg    = aisleConfig[aisleData.id] || {};
-        const kgMap  = cfg.kgPerPalet || {};
-        html += `
-            <table class="items-table">
-                <thead><tr>
-                    <th>Código</th><th>Descripción</th>
-                    <th style="text-align:right">Hojas</th>
-                    <th style="text-align:right">Kg reales</th>
-                    <th style="text-align:right">Kg/pal</th>
-                    <th style="text-align:center">Pal. est.</th>
-                </tr></thead>
-                <tbody>
-        `;
+        html += `<table class="items-table">
+            <thead><tr>
+                <th>Código</th><th>Descripción</th>
+                <th style="text-align:right">Hojas</th>
+                <th style="text-align:right">Kg</th>
+                <th style="text-align:right">Kg/pal</th>
+                <th style="text-align:center">Pal. est.</th>
+            </tr></thead><tbody>`;
         rows.forEach(g => {
-            const kgPerPal = kgMap[g.id] || 600;
-            const palEst   = (g.totalKilos / kgPerPal).toFixed(1);
-            const isCustom = !!kgMap[g.id];
-            html += `
-                <tr>
-                    <td class="ref-code">${g.id}</td>
-                    <td class="ref-desc" title="${g.tipo}">${g.tipo}</td>
-                    <td style="text-align:right; font-size:11px;">${fmtNum(g.totalHojas)}</td>
-                    <td style="text-align:right; font-size:11px; color:#9ca3af;">${fmtNum(g.totalKilos)}</td>
-                    <td style="text-align:right; font-size:11px;">
-                        <span style="${isCustom ? 'color:var(--accent); font-weight:700;' : 'color:#6b7280;'}">${fmtNum(kgPerPal)}</span>
-                    </td>
-                    <td style="text-align:center;">
-                        <span class="pal-badge">${palEst}</span>
-                    </td>
-                </tr>
-            `;
+            const kgPP  = getKgPerPalet(g.id);
+            const palEst = (g.totalKilos / kgPP).toFixed(1);
+            const isCustom = !!(articleConfig[g.id] && articleConfig[g.id].kgPerPalet > 0);
+            html += `<tr>
+                <td class="ref-code">${g.id}</td>
+                <td class="ref-desc">${g.tipo}</td>
+                <td style="text-align:right;font-size:11px;">${fmtNum(g.totalHojas)}</td>
+                <td style="text-align:right;font-size:11px;color:#9ca3af;">${fmtNum(g.totalKilos)}</td>
+                <td style="text-align:right;font-size:11px;">
+                    <span style="${isCustom?'color:var(--accent);font-weight:700;':'color:#6b7280;'}">${fmtNum(kgPP)}</span>
+                </td>
+                <td style="text-align:center;"><span class="pal-badge">${palEst}</span></td>
+            </tr>`;
         });
         html += `</tbody></table>`;
     } else {
@@ -287,172 +276,169 @@ function showInspector(aisleData) {
     panel.classList.add('visible');
 }
 
-// ─── TOGGLE ANULAR PASILLO ────────────────────────────────────────────────────
+// ─── TOGGLE ANULAR ────────────────────────────────────────────────────────────
 window.toggleAisleDisabled = function(id) {
     const cfg = getAisleCfg(id);
     cfg.disabled = !cfg.disabled;
     saveAisleConfig();
-    const label = cfg.disabled ? 'Pasillo anulado' : 'Pasillo reactivado';
-    addLog(cfg.disabled ? 'disable' : 'enable', `${label}: P${id}`, id);
+    addLog(cfg.disabled ? 'disable' : 'enable', `Pasillo ${cfg.disabled?'anulado':'reactivado'}: P${id}`, id);
     renderWarehouse();
     showInspector(allAislesData[id]);
 };
 
-// ─── MODAL DE EDICIÓN ─────────────────────────────────────────────────────────
+// ─── MODAL EDICIÓN PASILLO ────────────────────────────────────────────────────
 window.openEditModal = function(id) {
-    const aisle  = allAislesData[id];
-    const cfg    = getAisleCfg(id);
-    const cap    = cfg.capacity || aisle.capacity;
-    const kgMap  = cfg.kgPerPalet || {};
-
-    // Agrupar refs
-    const grouped = {};
-    (aisle.items || []).forEach(it => {
-        if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0 };
-        grouped[it.id].totalKilos += Math.max(0, it.kilos || 0);
-    });
-    const refs = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
-
-    let refsHtml = '';
-    refs.forEach(ref => {
-        const custom = kgMap[ref.id] || '';
-        refsHtml += `
-            <div class="edit-ref-row">
-                <div class="edit-ref-info">
-                    <span class="edit-ref-code">${ref.id}</span>
-                    <span class="edit-ref-desc" title="${ref.tipo}">${ref.tipo}</span>
-                </div>
-                <div class="edit-ref-input-wrap">
-                    <label>Kg/palet</label>
-                    <input type="number" min="1" max="99999"
-                           class="edit-input-small"
-                           data-ref="${ref.id}"
-                           placeholder="600"
-                           value="${custom}">
-                </div>
-            </div>
-        `;
-    });
+    const aisle = allAislesData[id];
+    const cfg   = getAisleCfg(id);
+    const cap   = cfg.capacity || aisle.capacity;
 
     const modal = document.getElementById('edit-modal');
     modal.innerHTML = `
         <div class="edit-modal-box" onclick="event.stopPropagation()">
             <div class="edit-modal-header">
                 <h3><i class="ri-settings-3-line"></i> Configurar Pasillo ${id}</h3>
-                <button class="insp-action-btn btn-close" onclick="window.closeEditModal()">
-                    <i class="ri-close-line"></i>
-                </button>
+                <button class="insp-action-btn btn-close" onclick="window.closeEditModal()"><i class="ri-close-line"></i></button>
             </div>
             <div class="edit-modal-body">
                 <div class="edit-section">
                     <label class="edit-label">Capacidad máxima (palets)</label>
-                    <input type="number" id="edit-capacity" min="1" max="9999"
-                           class="edit-input" value="${cap}" placeholder="${aisle.capacity}">
+                    <input type="number" id="edit-capacity" min="1" max="9999" class="edit-input" value="${cap}" placeholder="${aisle.capacity}">
                     <span class="edit-hint">Por defecto: ${aisle.capacity} palets</span>
                 </div>
-                ${refs.length > 0 ? `
                 <div class="edit-section">
-                    <label class="edit-label">Kg por palet por referencia</label>
-                    <span class="edit-hint">Por defecto: 600 kg/palet. Ajusta para cada bobina/palet cortado.</span>
-                    <div class="edit-refs-list">${refsHtml}</div>
-                </div>` : ''}
+                    <label class="edit-label">Kg/palet por artículo</label>
+                    <span class="edit-hint">Configura en el <strong>Menú Artículos</strong> → columna Kg/pal</span>
+                </div>
             </div>
             <div class="edit-modal-footer">
-                <button class="btn-secondary" onclick="window.resetAisleCfg('${id}')">
-                    <i class="ri-refresh-line"></i> Restaurar por defecto
-                </button>
-                <button class="btn-primary" onclick="window.saveEditModal('${id}')">
-                    <i class="ri-save-line"></i> Guardar
-                </button>
+                <button class="btn-secondary" onclick="window.resetAisleCfg('${id}')"><i class="ri-refresh-line"></i> Restaurar</button>
+                <button class="btn-primary" onclick="window.saveEditModal('${id}')"><i class="ri-save-line"></i> Guardar</button>
             </div>
-        </div>
-    `;
+        </div>`;
     modal.classList.add('visible');
 };
-
-window.closeEditModal = function() {
-    document.getElementById('edit-modal').classList.remove('visible');
-};
-
+window.closeEditModal = function() { document.getElementById('edit-modal').classList.remove('visible'); };
 window.saveEditModal = function(id) {
-    const cfg     = getAisleCfg(id);
-    const capVal  = parseInt(document.getElementById('edit-capacity').value);
-    if (capVal > 0) cfg.capacity = capVal;
-
-    cfg.kgPerPalet = cfg.kgPerPalet || {};
-    document.querySelectorAll('.edit-input-small').forEach(inp => {
-        const ref = inp.getAttribute('data-ref');
-        const val = parseFloat(inp.value);
-        if (val > 0) cfg.kgPerPalet[ref] = val;
-        else delete cfg.kgPerPalet[ref];
-    });
-
+    const cfg = getAisleCfg(id);
+    const v   = parseInt(document.getElementById('edit-capacity').value);
+    if (v > 0) cfg.capacity = v;
     saveAisleConfig();
-    addLog('edit', `P${id} — configuración actualizada`, id);
+    addLog('edit', `P${id} — capacidad actualizada a ${v}`, id);
     window.closeEditModal();
     renderWarehouse();
     showInspector(allAislesData[id]);
 };
-
 window.resetAisleCfg = function(id) {
-    if (!confirm(`¿Restaurar la configuración por defecto del pasillo ${id}?`)) return;
+    if (!confirm(`¿Restaurar configuración por defecto del pasillo ${id}?`)) return;
     delete aisleConfig[id];
     saveAisleConfig();
-    addLog('edit', `P${id} — configuración restaurada`, id);
+    addLog('edit', `P${id} — restaurado`, id);
     window.closeEditModal();
     renderWarehouse();
     showInspector(allAislesData[id]);
 };
 
-// ─── BÚSQUEDA ─────────────────────────────────────────────────────────────────
+// ─── BÚSQUEDA CON AUTOCOMPLETADO ──────────────────────────────────────────────
 function setupSearch() {
-    const inp = document.getElementById('search-input');
+    const inp      = document.getElementById('search-input');
     const clearBtn = document.getElementById('search-clear');
+    const dropdown = document.getElementById('search-dropdown');
     if (!inp) return;
 
     function clearSearch() {
         inp.value = '';
-        inp.dispatchEvent(new Event('input'));
+        if (clearBtn) clearBtn.style.display = 'none';
+        hideDropdown();
+        document.querySelectorAll('.aisle-unit').forEach(el => { el.style.opacity = '1'; el.style.outline = ''; });
         window.closeInspector();
         inp.focus();
     }
-
     if (clearBtn) clearBtn.addEventListener('click', clearSearch);
+
+    function hideDropdown() { if (dropdown) dropdown.style.display = 'none'; }
+
+    function showDropdown(results) {
+        if (!dropdown || !results.length) { hideDropdown(); return; }
+        dropdown.innerHTML = '';
+        results.slice(0, 12).forEach(r => {
+            const item = document.createElement('div');
+            item.className = 'search-dd-item';
+            const aisleList = r.aisles.map(a => `<span class="dd-aisle-tag">P${a}</span>`).join('');
+            item.innerHTML = `
+                <div class="dd-main">
+                    <span class="dd-tipo">${r.tipo}</span>
+                    <span class="dd-code">${r.id}</span>
+                </div>
+                <div class="dd-meta">
+                    <span class="dd-kilos">${fmtNum(Math.round(r.totalKilos))} kg · ${r.palets.toFixed(1)} pal.</span>
+                    <div class="dd-aisles">${aisleList}</div>
+                </div>`;
+            item.addEventListener('click', e => {
+                e.stopPropagation();
+                inp.value = r.tipo;
+                if (clearBtn) clearBtn.style.display = 'flex';
+                hideDropdown();
+                highlightAisles(new Set(r.aisles));
+                // Si está en un solo pasillo, abrir inspector
+                if (r.aisles.length === 1) {
+                    const el = document.querySelector(`.aisle-unit[data-id="${r.aisles[0]}"]`);
+                    if (el) { document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active')); el.classList.add('active'); }
+                    showInspector(allAislesData[r.aisles[0]]);
+                }
+            });
+            dropdown.appendChild(item);
+        });
+        if (results.length > 12) {
+            const more = document.createElement('div');
+            more.className = 'search-dd-more';
+            more.textContent = `+${results.length - 12} resultados más…`;
+            dropdown.appendChild(more);
+        }
+        dropdown.style.display = 'block';
+    }
+
+    function highlightAisles(aisleSet) {
+        document.querySelectorAll('.aisle-unit').forEach(el => {
+            const id = el.getAttribute('data-id');
+            if (aisleSet.has(id)) { el.style.opacity = '1'; el.style.outline = '2px solid var(--accent)'; el.style.outlineOffset = '1px'; }
+            else { el.style.opacity = '0.15'; el.style.outline = ''; }
+        });
+    }
 
     inp.addEventListener('input', e => {
         const q = e.target.value.trim().toLowerCase();
-        // Mostrar/ocultar X según haya texto
         if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+
         if (!q) {
             document.querySelectorAll('.aisle-unit').forEach(el => { el.style.opacity = '1'; el.style.outline = ''; });
+            hideDropdown();
             return;
         }
-        const hits = new Set();
-        Object.values(allAislesData).forEach(a => {
-            const match = a.id.toLowerCase().includes(q) ||
-                (a.items || []).some(it =>
-                    (it.id && it.id.toLowerCase().includes(q)) ||
-                    (it.tipo && it.tipo.toLowerCase().includes(q)) ||
-                    (it.gramaje && it.gramaje.toLowerCase().includes(q)) ||
-                    (it.proveedor && it.proveedor.toLowerCase().includes(q))
-                );
-            if (match) hits.add(a.id);
-        });
-        document.querySelectorAll('.aisle-unit').forEach(el => {
-            const id = el.getAttribute('data-id');
-            if (hits.has(id)) { el.style.opacity = '1'; el.style.outline = '2px solid var(--accent)'; el.style.outlineOffset = '1px'; }
-            else { el.style.opacity = '0.15'; el.style.outline = ''; }
-        });
-        if (hits.size === 1) {
-            const [sid] = hits;
-            const el = document.querySelector(`.aisle-unit[data-id="${sid}"]`);
-            if (el) { document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active')); el.classList.add('active'); }
-            showInspector(allAislesData[sid]);
-        }
+
+        const cat = buildCatalog();
+        const results = Object.values(cat).filter(r =>
+            r.tipo.toLowerCase().includes(q) ||
+            r.id.toLowerCase().includes(q)   ||
+            r.gramaje.toLowerCase().includes(q) ||
+            r.proveedor.toLowerCase().includes(q)
+        ).sort((a, b) => b.totalKilos - a.totalKilos);
+
+        showDropdown(results);
+
+        // Iluminar todos los pasillos que contienen algún resultado
+        const allMatchAisles = new Set();
+        results.forEach(r => r.aisles.forEach(a => allMatchAisles.add(a)));
+        highlightAisles(allMatchAisles);
     });
+
     inp.addEventListener('keydown', e => {
         if (e.key === 'Escape') clearSearch();
     });
+
+    // Cerrar dropdown al clicar fuera
+    document.addEventListener('click', e => {
+        if (!e.target.closest('#search-dropdown') && !e.target.closest('.sidebar-search')) hideDropdown();
+    }, { capture: false });
 }
 
 // ─── NAVEGACIÓN ───────────────────────────────────────────────────────────────
@@ -462,33 +448,34 @@ function setupNavigation() {
             const view = btn.getAttribute('data-view');
             document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            ['map','metrics','history'].forEach(v => {
+            ['map','metrics','history','articles'].forEach(v => {
                 const el = document.getElementById(`view-${v}`);
-                el.style.display = v === view ? 'flex' : 'none';
-                el.classList.toggle('active', v === view);
+                if (el) el.style.display = v === view ? 'flex' : 'none';
             });
-            if (view === 'metrics') renderMetrics();
-            if (view === 'history') renderHistory();
+            if (view === 'metrics')  renderMetrics();
+            if (view === 'history')  renderHistory();
+            if (view === 'articles') renderArticles();
             window.closeInspector();
         });
     });
-    document.getElementById('view-map').style.display     = 'flex';
-    document.getElementById('view-metrics').style.display = 'none';
-    document.getElementById('view-history').style.display = 'none';
+    document.getElementById('view-map').style.display      = 'flex';
+    document.getElementById('view-metrics').style.display  = 'none';
+    document.getElementById('view-history').style.display  = 'none';
+    document.getElementById('view-articles').style.display = 'none';
 }
 
-// ─── MÉTRICAS ─────────────────────────────────────────────────────────────────
+// ─── VISTA MÉTRICAS ───────────────────────────────────────────────────────────
 function renderMetrics() {
     const aisles = Object.values(allAislesData);
-    let totalKg = 0, totalPal = 0, totalItems = 0, ocupados = 0, vacios = 0, saturados = 0, anulados = 0;
+    let totalKg=0, totalPal=0, totalItems=0, ocupados=0, vacios=0, saturados=0, anulados=0;
     aisles.forEach(a => {
         if (isDisabled(a)) { anulados++; return; }
-        const kg  = calcTotalKilos(a.items, a.id);
-        const pal = kg / 600;
+        const kg  = calcTotalKilos(a.items);
+        const pal = calcPalets(a.items);
         const occ = (pal / getCapacity(a)) * 100;
-        totalKg += kg; totalPal += pal; totalItems += (a.items?.length || 0);
-        if (kg > 0) ocupados++; else vacios++;
-        if (occ > 75) saturados++;
+        totalKg += kg; totalPal += pal; totalItems += (a.items?.length||0);
+        if (kg>0) ocupados++; else vacios++;
+        if (occ>75) saturados++;
     });
     document.getElementById('metrics-kpis').innerHTML = `
         <div class="metric-card"><div class="metric-label">Total Kilos</div><div class="metric-value" style="color:var(--accent)">${fmtNum(Math.round(totalKg))}</div><div class="metric-sub">en almacén</div></div>
@@ -496,26 +483,18 @@ function renderMetrics() {
         <div class="metric-card"><div class="metric-label">Referencias</div><div class="metric-value">${fmtNum(totalItems)}</div><div class="metric-sub">líneas de stock</div></div>
         <div class="metric-card"><div class="metric-label">Ocupados</div><div class="metric-value" style="color:var(--heat-medium)">${ocupados}</div><div class="metric-sub">con stock</div></div>
         <div class="metric-card"><div class="metric-label">Vacíos</div><div class="metric-value" style="color:var(--heat-empty)">${vacios}</div><div class="metric-sub">libres</div></div>
-        <div class="metric-card"><div class="metric-label">Anulados</div><div class="metric-value" style="color:#6b7280">${anulados}</div><div class="metric-sub">fuera de cálculo</div></div>
-    `;
-    const sorted = aisles
-        .filter(a => !isDisabled(a))
-        .map(a => {
-            const kg  = calcTotalKilos(a.items, a.id);
-            const pal = parseFloat((kg / 600).toFixed(1));
-            const occ = Math.round((pal / getCapacity(a)) * 100);
-            return { id: a.id, pal, occ };
-        })
-        .filter(a => a.pal > 0)
-        .sort((a, b) => b.occ - a.occ)
-        .slice(0, 15);
-    const maxPal = Math.max(...sorted.map(a => a.pal), 1);
+        <div class="metric-card"><div class="metric-label">Anulados</div><div class="metric-value" style="color:#6b7280">${anulados}</div><div class="metric-sub">fuera de cálculo</div></div>`;
+    const sorted = aisles.filter(a=>!isDisabled(a)).map(a => {
+        const pal = parseFloat(calcPalets(a.items).toFixed(1));
+        const occ = Math.round((pal/getCapacity(a))*100);
+        return { id:a.id, pal, occ };
+    }).filter(a=>a.pal>0).sort((a,b)=>b.occ-a.occ).slice(0,15);
+    const maxPal = Math.max(...sorted.map(a=>a.pal),1);
     document.getElementById('metrics-top-body').innerHTML = sorted.map(a => {
-        const c   = getHeatmapColorHex(a.occ);
-        const pct = Math.min((a.pal / maxPal) * 100, 100);
+        const c = getHeatmapColorHex(a.occ);
         return `<div class="top-list-row" onclick="goToAisle('${a.id}')">
             <span class="row-id">P${a.id}</span>
-            <div class="row-bar-wrap"><div class="row-bar" style="width:${pct}%; background:${c};"></div></div>
+            <div class="row-bar-wrap"><div class="row-bar" style="width:${Math.min((a.pal/maxPal)*100,100)}%;background:${c};"></div></div>
             <span class="row-palets">${a.pal} pal.</span>
             <span class="row-pct" style="color:${c};">${a.occ}%</span>
         </div>`;
@@ -526,24 +505,208 @@ window.goToAisle = function(id) {
     document.querySelector('[data-view="map"]').click();
     setTimeout(() => {
         const el = document.querySelector(`.aisle-unit[data-id="${id}"]`);
-        if (el) { document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active')); el.classList.add('active'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); showInspector(allAislesData[id]); }
+        if (el) { document.querySelectorAll('.aisle-unit.active').forEach(a=>a.classList.remove('active')); el.classList.add('active'); el.scrollIntoView({behavior:'smooth',block:'center'}); showInspector(allAislesData[id]); }
     }, 100);
 };
 
+// ─── VISTA ARTÍCULOS ──────────────────────────────────────────────────────────
+let articleSortCol = 'totalKilos', articleSortDir = -1, articleSearch = '';
+
+function renderArticles() {
+    const cat = buildCatalog();
+    let rows = Object.values(cat);
+
+    // Filtro
+    if (articleSearch) {
+        const q = articleSearch.toLowerCase();
+        rows = rows.filter(r =>
+            r.tipo.toLowerCase().includes(q) ||
+            r.id.toLowerCase().includes(q) ||
+            r.proveedor.toLowerCase().includes(q) ||
+            r.gramaje.toLowerCase().includes(q)
+        );
+    }
+
+    // Ordenar
+    rows.sort((a, b) => {
+        let va = a[articleSortCol], vb = b[articleSortCol];
+        if (typeof va === 'string') return articleSortDir * va.localeCompare(vb);
+        return articleSortDir * (va - vb);
+    });
+
+    const thead = (col, label, align='left') => {
+        const active = articleSortCol === col;
+        const icon   = active ? (articleSortDir === 1 ? '↑' : '↓') : '';
+        return `<th class="art-th ${active?'active':''}" style="text-align:${align};cursor:pointer;" onclick="window.artSort('${col}')">${label} ${icon}</th>`;
+    };
+
+    const container = document.getElementById('view-articles');
+    // Toolbar
+    let html = `
+        <div class="canvas-header" style="flex-shrink:0;">
+            <h2>Artículos <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(${rows.length})</span></h2>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <div class="art-search-wrap">
+                    <i class="ri-search-line" style="color:var(--text-muted);font-size:13px;"></i>
+                    <input type="text" id="art-search-input" class="art-search-input" placeholder="Filtrar artículos..." value="${articleSearch}">
+                </div>
+                <button class="btn-secondary" style="font-size:11px;padding:5px 10px;" onclick="window.importArticleConfig()" title="Importar kg/palet desde Excel">
+                    <i class="ri-upload-2-line"></i> Importar Excel
+                </button>
+                <input type="file" id="art-excel-input" accept=".xls,.xlsx" style="display:none">
+            </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;min-height:0;">
+        <table class="items-table art-table">
+            <thead><tr>
+                ${thead('tipo','Descripción')}
+                ${thead('id','Código')}
+                ${thead('proveedor','Proveedor')}
+                ${thead('gramaje','Gramaje')}
+                ${thead('totalKilos','Kg totales','right')}
+                ${thead('palets','Palets est.','right')}
+                <th style="text-align:right;">Kg/palet</th>
+                <th style="text-align:center;">Pasillos</th>
+            </tr></thead>
+            <tbody>`;
+
+    rows.forEach(r => {
+        const kgPP     = getKgPerPalet(r.id);
+        const isCustom = !!(articleConfig[r.id] && articleConfig[r.id].kgPerPalet > 0);
+        const aislesHtml = r.aisles.slice(0,5).map(a => `<span class="dd-aisle-tag" style="cursor:pointer;" onclick="window.goToAisle('${a}')" title="Ir al pasillo ${a}">P${a}</span>`).join('');
+        const moreAisles = r.aisles.length > 5 ? `<span style="color:var(--text-muted);font-size:10px;">+${r.aisles.length-5}</span>` : '';
+
+        html += `<tr class="art-row">
+            <td style="font-size:12px;line-height:1.35;">${r.tipo}</td>
+            <td class="ref-code">${r.id}</td>
+            <td style="font-size:11px;color:var(--text-muted);">${r.proveedor}</td>
+            <td style="font-size:11px;color:var(--text-muted);">${r.gramaje}</td>
+            <td style="text-align:right;font-family:var(--font-mono);font-size:11px;">${fmtNum(Math.round(r.totalKilos))}</td>
+            <td style="text-align:right;font-family:var(--font-mono);font-size:11px;">${r.palets.toFixed(1)}</td>
+            <td style="text-align:right;">
+                <div class="kgpal-cell">
+                    <input type="number" min="1" max="99999"
+                           class="kgpal-input ${isCustom?'kgpal-custom':''}"
+                           data-ref="${r.id}"
+                           value="${isCustom ? kgPP : ''}"
+                           placeholder="600"
+                           onchange="window.saveKgPal('${r.id}', this.value)"
+                           onclick="event.stopPropagation()">
+                </div>
+            </td>
+            <td style="text-align:center;">
+                <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;">${aislesHtml}${moreAisles}</div>
+            </td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+
+    // Search en artículos
+    const artInp = document.getElementById('art-search-input');
+    if (artInp) {
+        artInp.addEventListener('input', e => {
+            articleSearch = e.target.value;
+            renderArticles();
+        });
+        artInp.focus();
+        artInp.setSelectionRange(artInp.value.length, artInp.value.length);
+    }
+
+    // File input para Excel
+    const fileInp = document.getElementById('art-excel-input');
+    if (fileInp) fileInp.addEventListener('change', handleExcelImport);
+}
+
+window.artSort = function(col) {
+    if (articleSortCol === col) articleSortDir *= -1;
+    else { articleSortCol = col; articleSortDir = -1; }
+    renderArticles();
+};
+
+window.saveKgPal = function(refId, val) {
+    const n = parseFloat(val);
+    if (n > 0) {
+        getArticleCfg(refId).kgPerPalet = n;
+        addLog('edit', `Kg/palet actualizado: ${refId} → ${n}`, null);
+    } else {
+        delete articleConfig[refId];
+    }
+    saveArticleConfig();
+    renderWarehouse();
+    // Actualizar el input visualmente
+    const inp = document.querySelector(`.kgpal-input[data-ref="${refId}"]`);
+    if (inp) inp.classList.toggle('kgpal-custom', n > 0);
+};
+
+// ─── IMPORTAR EXCEL ───────────────────────────────────────────────────────────
+window.importArticleConfig = function() {
+    document.getElementById('art-excel-input').click();
+};
+
+async function handleExcelImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Necesitamos SheetJS — cargarlo dinámicamente si no está
+    if (!window.XLSX) {
+        await new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    }
+
+    const data   = await file.arrayBuffer();
+    const wb     = XLSX.read(data, { type: 'array' });
+    const ws     = wb.Sheets[wb.SheetNames[0]];
+    const rows   = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+    if (!rows.length) { alert('El Excel parece vacío.'); return; }
+
+    // Detectar columnas automáticamente (busca cabeceras que contengan las palabras clave)
+    const keys  = Object.keys(rows[0]);
+    const find  = (kw) => keys.find(k => k.toLowerCase().replace(/[\s_]/g,'').includes(kw.toLowerCase().replace(/[\s_]/g,'')));
+
+    const colCod  = find('codigo') || find('id') || find('referencia') || find('ref') || keys[0];
+    const colKg   = find('kgpalet') || find('kg/palet') || find('kgpal') || find('kgporapalet') || find('pesopal');
+
+    if (!colCod) { alert('No encuentro columna de código/referencia en el Excel.'); return; }
+    if (!colKg)  { alert(`No encuentro columna de Kg/palet. Columnas encontradas:\n${keys.join(', ')}\n\nRenombra la columna a "Kg/palet" e inténtalo de nuevo.`); return; }
+
+    let updated = 0, skipped = 0;
+    rows.forEach(row => {
+        const refId = String(row[colCod]).trim();
+        const kg    = parseFloat(String(row[colKg]).replace(',','.'));
+        if (!refId || isNaN(kg) || kg <= 0) { skipped++; return; }
+        getArticleCfg(refId).kgPerPalet = kg;
+        updated++;
+    });
+
+    saveArticleConfig();
+    renderWarehouse();
+    renderArticles();
+    addLog('sync', `Excel importado: ${updated} kg/palet actualizados, ${skipped} filas ignoradas`);
+    alert(`✅ Importación completada:\n• ${updated} referencias actualizadas\n• ${skipped} filas ignoradas (sin código o kg vacío)\n\nColumna código: "${colCod}"\nColumna kg/palet: "${colKg}"`);
+    e.target.value = ''; // reset input
+}
+
 // ─── HISTORIAL ────────────────────────────────────────────────────────────────
 function addLog(type, desc, aisleId) {
-    const colors = { system: '#6366f1', update: '#f59e0b', sync: '#22c55e', error: '#ef4444', edit: '#a78bfa', disable: '#6b7280', enable: '#22c55e' };
-    activityLog.unshift({ type, desc, aisleId: aisleId || null, time: new Date(), color: colors[type] || '#6b7280' });
+    const colors = { system:'#6366f1', update:'#f59e0b', sync:'#22c55e', error:'#ef4444', edit:'#a78bfa', disable:'#6b7280', enable:'#22c55e' };
+    activityLog.unshift({ type, desc, aisleId: aisleId||null, time: new Date(), color: colors[type]||'#6b7280' });
     if (activityLog.length > 60) activityLog.pop();
 }
 
 function renderHistory() {
     const el = document.getElementById('history-list');
-    if (!activityLog.length) { el.innerHTML = `<div style="padding:30px; text-align:center; color:var(--text-muted); font-size:12px; font-family:var(--font-mono);">Sin actividad</div>`; return; }
+    if (!activityLog.length) { el.innerHTML = `<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px;font-family:var(--font-mono);">Sin actividad</div>`; return; }
     el.innerHTML = activityLog.map(log => {
-        const t = log.time;
-        const ts = `${t.toLocaleDateString('es-ES')} ${t.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })}`;
-        const badge = log.aisleId ? `<span class="history-badge" style="background:${log.color}22; color:${log.color};">P${log.aisleId}</span>` : '';
+        const t  = log.time;
+        const ts = `${t.toLocaleDateString('es-ES')} ${t.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}`;
+        const badge = log.aisleId ? `<span class="history-badge" style="background:${log.color}22;color:${log.color};">P${log.aisleId}</span>` : '';
         return `<div class="history-row"><div class="history-dot" style="background:${log.color};"></div><span class="history-time">${ts}</span><span class="history-desc">${log.desc}</span>${badge}</div>`;
     }).join('');
 }
@@ -554,27 +717,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderWarehouse();
     setupSearch();
     setupNavigation();
-
-    // Cerrar modal al clicar fuera
     document.getElementById('edit-modal').addEventListener('click', () => window.closeEditModal());
 
     if (window.firebaseDb) {
         const statusEl = document.querySelector('.status-indicator');
         statusEl.textContent = 'Conectando...';
-        const db = window.firebaseDb;
-        const colRef = window.firebaseCollection(db, 'almacen');
+        const db = window.firebaseDb, colRef = window.firebaseCollection(db, 'almacen');
 
         document.getElementById('force-sync-btn').addEventListener('click', async () => {
-            if (!confirm('¿Sobreescribir TODOS los pasillos en Firestore con seed.json?\n\nEsto borrará cambios manuales en Firebase (no las configuraciones locales).')) return;
+            if (!confirm('¿Sobreescribir TODOS los pasillos en Firestore con seed.json?')) return;
             statusEl.textContent = 'Sincronizando...';
             document.getElementById('force-sync-btn').disabled = true;
             try {
                 await Promise.all(Object.keys(allAislesData).map(id =>
-                    window.firebaseSetDoc(window.firebaseDoc(db, 'almacen', id), { items: localSeedData[id]?.items || [] })
+                    window.firebaseSetDoc(window.firebaseDoc(db,'almacen',id), { items: localSeedData[id]?.items||[] })
                 ));
-                addLog('sync', 'Sincronización forzada desde Excel');
+                addLog('sync','Sincronización forzada desde Excel');
                 alert('¡Completado!'); statusEl.textContent = 'En vivo (Firestore)';
-            } catch(e) { addLog('error', e.message); alert('Error: ' + e.message); statusEl.textContent = 'Error'; }
+            } catch(e) { addLog('error',e.message); alert('Error: '+e.message); statusEl.textContent='Error'; }
             document.getElementById('force-sync-btn').disabled = false;
         });
 
@@ -583,24 +743,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (snapshot.empty && isFirstLoad) {
                 statusEl.textContent = 'Volcando datos...';
                 Promise.all(Object.keys(allAislesData).map(id =>
-                    window.firebaseSetDoc(window.firebaseDoc(db, 'almacen', id), { items: allAislesData[id].items || [] })
-                )).then(() => addLog('sync', 'Datos iniciales volcados')).catch(console.error);
+                    window.firebaseSetDoc(window.firebaseDoc(db,'almacen',id), { items: allAislesData[id].items||[] })
+                )).then(()=>addLog('sync','Datos iniciales volcados')).catch(console.error);
             } else if (!snapshot.empty) {
                 snapshot.forEach(doc => {
                     const id = doc.id, data = doc.data();
                     if (allAislesData[id]) {
                         const prev = JSON.stringify(allAislesData[id].items);
                         const next = Array.isArray(data.items) ? data.items : [];
-                        if (!isFirstLoad && prev !== JSON.stringify(next)) addLog('update', `P${id} actualizado`, id);
+                        if (!isFirstLoad && prev !== JSON.stringify(next)) addLog('update',`P${id} actualizado`,id);
                         allAislesData[id].items = next;
                     }
                 });
                 statusEl.textContent = 'En vivo (Firestore)';
                 renderWarehouse();
                 const active = document.querySelector('.aisle-unit.active');
-                if (active) { const id = active.getAttribute('data-id'); if (allAislesData[id]) showInspector(allAislesData[id]); }
+                if (active) { const id=active.getAttribute('data-id'); if(allAislesData[id]) showInspector(allAislesData[id]); }
             }
             isFirstLoad = false;
-        }, err => { addLog('error', err.message); statusEl.textContent = 'Error (local)'; });
+        }, err => { addLog('error',err.message); statusEl.textContent='Error (local)'; });
     }
 });

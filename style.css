@@ -963,3 +963,143 @@ body {
     max-width: 260px;
     line-height: 1.35;
 }
+
+/* ── SEARCH DROPDOWN ─────────────────────────────────────── */
+.sidebar-search-wrap {
+    position: relative;
+}
+
+.search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0; right: 0;
+    background: rgba(12, 14, 20, 0.98);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+    z-index: 500;
+    overflow: hidden;
+    max-height: 340px;
+    overflow-y: auto;
+}
+.search-dropdown::-webkit-scrollbar { width: 3px; }
+.search-dropdown::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.search-dd-item {
+    padding: 9px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.12s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.search-dd-item:last-child { border-bottom: none; }
+.search-dd-item:hover { background: rgba(99,102,241,0.12); }
+
+.dd-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.dd-tipo { font-size: 12px; color: var(--text-main); line-height: 1.3; flex: 1; }
+.dd-code { font-size: 10px; color: var(--accent); font-family: var(--font-mono); font-weight: 700; flex-shrink: 0; }
+
+.dd-meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.dd-kilos { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
+.dd-aisles { display: flex; gap: 3px; flex-wrap: wrap; }
+
+.dd-aisle-tag {
+    background: rgba(99,102,241,0.15);
+    color: var(--accent);
+    border: 1px solid rgba(99,102,241,0.25);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.search-dd-more {
+    padding: 8px 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    text-align: center;
+    border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+/* ── VISTA ARTÍCULOS ─────────────────────────────────────── */
+.art-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.art-th {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-family: var(--font-mono);
+    user-select: none;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    background: rgba(14,16,22,0.97);
+    z-index: 2;
+    transition: color 0.15s;
+}
+.art-th:hover { color: var(--text-main); }
+.art-th.active { color: var(--accent); }
+
+.art-row td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: middle; }
+.art-row:hover td { background: rgba(255,255,255,0.02); }
+.art-row:last-child td { border-bottom: none; }
+
+/* Input Kg/palet en tabla artículos */
+.kgpal-cell { display: flex; justify-content: flex-end; }
+.kgpal-input {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 5px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    padding: 3px 7px;
+    width: 72px;
+    text-align: right;
+    outline: none;
+    transition: var(--transition);
+}
+.kgpal-input::placeholder { color: #374151; }
+.kgpal-input:focus { border-color: var(--accent); color: var(--text-main); }
+.kgpal-input.kgpal-custom {
+    border-color: rgba(99,102,241,0.4);
+    color: var(--accent);
+    font-weight: 700;
+    background: rgba(99,102,241,0.06);
+}
+
+/* Search en artículos */
+.art-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 7px;
+    padding: 5px 10px;
+    transition: var(--transition);
+}
+.art-search-wrap:focus-within { border-color: var(--accent); }
+.art-search-input {
+    background: none;
+    border: none;
+    color: var(--text-main);
+    font-size: 12px;
+    font-family: var(--font-ui);
+    outline: none;
+    width: 160px;
+}
+.art-search-input::placeholder { color: var(--text-muted); }
