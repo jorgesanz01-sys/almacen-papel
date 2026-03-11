@@ -52,10 +52,10 @@ body {
 /* SIDEBAR */
 .sidebar {
     border-radius: var(--radius);
-    padding: 24px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 32px;
+    gap: 16px;
 }
 
 .brand {
@@ -178,7 +178,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 0 16px;
-    height: 64px;
+    height: 54px;
     background: var(--bg-panel);
     border-radius: var(--radius);
     border: 1px solid var(--glass-border);
@@ -259,7 +259,7 @@ body {
 .warehouse-canvas {
     flex: 1;
     border-radius: var(--radius);
-    padding: 24px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -270,7 +270,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 12px;
 }
 
 .filters {
@@ -307,13 +307,13 @@ body {
 .warehouse-grid {
     flex: 1;
     display: grid;
-    /* 3 Column layout based on the physical warehouse */
-    grid-template-columns: repeat(3, minmax(200px, 280px));
+    /* 4 Column layout to fit everything and external on the right */
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
     justify-content: center;
-    gap: 40px;
+    gap: 16px;
     overflow-y: auto;
     padding-right: 10px;
-    padding-bottom: 40px;
+    padding-bottom: 20px;
 }
 
 .warehouse-grid::-webkit-scrollbar {
@@ -327,17 +327,17 @@ body {
 .layout-column {
     display: flex;
     flex-direction: column;
-    gap: 48px;
+    gap: 16px;
 }
 
 .layout-block {
     background: rgba(0,0,0,0.2);
     border: 1px solid var(--glass-border);
     border-radius: 12px;
-    padding: 16px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     transition: var(--transition);
 }
 
@@ -380,8 +380,8 @@ body {
 /* Bin / Racks Grid within Aisle */
 .racks-container {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+    gap: 6px;
 }
 
 .racks-container.single-col {
@@ -390,10 +390,10 @@ body {
 }
 
 .rack {
-    height: 80px;
+    height: 48px;
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.05);
-    border-radius: 8px;
+    border-radius: 6px;
     position: relative;
     cursor: pointer;
     transition: var(--transition);
@@ -416,19 +416,19 @@ body {
 }
 
 .rack-id {
-    font-size: 16px !important;
+    font-size: 13px !important;
     font-weight: 800 !important;
     color: var(--text-main);
 }
 
 .aisle-badge {
-    font-size: 12px;
+    font-size: 10px;
     color: rgba(255,255,255,0.8);
     z-index: 1;
-    margin-top: 6px;
+    margin-top: 3px;
     background: rgba(0,0,0,0.5);
-    padding: 3px 8px;
-    border-radius: 12px;
+    padding: 2px 5px;
+    border-radius: 8px;
 }
 
 .rack:hover {

@@ -122,11 +122,12 @@ function renderWarehouse() {
             }
 
             blockEl.className = 'layout-block';
+            const containerClass = block.isExternal ? 'single-col' : '';
             let blockHtml = `
                 <div class="aisle-header">
                     <span class="aisle-title">${block.name}</span>
                 </div>
-                <div class="racks-container single-col">
+                <div class="racks-container ${containerClass}">
             `;
 
             block.aisles.forEach(aisle => {
