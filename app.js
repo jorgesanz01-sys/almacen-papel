@@ -262,30 +262,45 @@ document.addEventListener('DOMContentLoaded', () => {
     initMockData();
     renderWarehouse();
     
-    // Check if Firebase is available
+    // Check if Firestore is available
     if (window.firebaseDb) {
         const statusInd = document.querySelector('.status-indicator');
-        statusInd.textContent = 'Conectando a Firebase...';
+        statusInd.textContent = 'Conectando a Firestore...';
         
         const db = window.firebaseDb;
-        const warehouseRef = window.firebaseRef(db, 'almacen');
+        const colRef = window.firebaseCollection(db, 'almacen');
         
         let isFirstLoad = true;
         
-        window.firebaseOnValue(warehouseRef, (snapshot) => {
-            const data = snapshot.val();
-            
-            if (data) {
+        window.firebaseOnSnapshot(colRef, (snapshot) => {
+            if (snapshot.empty && isFirstLoad && window.firebaseSetDoc) {
+                // Database is completely empty. Let's auto-seed it with our mock data
+                console.log("Colección de Firestore vacía. Sembrando con datos iniciales...");
+                
+                let promises = [];
+                for (let aId in allAislesData) {
+                    const docRef = window.firebaseDoc(db, 'almacen', aId);
+                    promises.push(window.firebaseSetDoc(docRef, {
+                        items: allAislesData[aId].items || []
+                    }));
+                }
+                
+                Promise.all(promises)
+                    .then(() => console.log("Datos sembrados con éxito. ¡Todo listo!"))
+                    .catch(e => console.error("Error al poblar Firestore:", e));
+            } else if (!snapshot.empty) {
                 // Real data received! Merge it into our local state mapping
-                // Data structure expected: { "01": { items: [...] }, "02": { items: [...] } }
-                Object.keys(data).forEach(aisleId => {
+                snapshot.forEach(docSnap => {
+                    const aisleId = docSnap.id;
+                    const data = docSnap.data();
+                    
                     if (allAislesData[aisleId]) {
-                        // Ensure we always have an array
-                        const incomingItems = data[aisleId].items;
-                        allAislesData[aisleId].items = Array.isArray(incomingItems) ? incomingItems : (incomingItems ? Object.values(incomingItems) : []);
+                        const incomingItems = data.items;
+                        allAislesData[aisleId].items = Array.isArray(incomingItems) ? incomingItems : [];
                     }
                 });
-                statusInd.textContent = 'En vivo (Firebase)';
+                
+                statusInd.textContent = 'En vivo (Firestore)';
                 renderWarehouse();
                 
                 // If inspector is open, refresh it
@@ -294,25 +309,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const id = activeAisle.getAttribute('data-id');
                     showInspector(allAislesData[id]);
                 }
-            } else if (isFirstLoad && window.firebaseSet) {
-                console.log("Base de datos vacía. Sembrando con datos iniciales...");
-                
-                const seedData = {};
-                for (let aId in allAislesData) {
-                    seedData[aId] = {
-                        items: allAislesData[aId].items || []
-                    };
-                }
-                
-                window.firebaseSet(warehouseRef, seedData)
-                    .then(() => console.log("Datos sembrados con éxito. ¡Todo listo!"))
-                    .catch(e => console.error("Error al poblar la base de datos:", e));
             }
             
             isFirstLoad = false;
         }, (error) => {
-            console.error("Error al escuchar Firebase:", error);
-            statusInd.textContent = 'Error Firebase (Usando Local)';
+            console.error("Error al escuchar Firestore:", error);
+            statusInd.textContent = 'Error Firestore (Usando Local)';
         });
         
     }

@@ -79,21 +79,25 @@
     <!-- Firebase SDK Setup -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-        import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
+        import { getFirestore, collection, doc, onSnapshot, setDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
+        // Mantenemos la misma config, Firebase detecta Firestore automáticamente con el Project ID
         const firebaseConfig = {
-            databaseURL: "https://almacen-papel-default-rtdb.europe-west1.firebasedatabase.app/"
+            databaseURL: "https://almacen-papel-default-rtdb.europe-west1.firebasedatabase.app/",
+            projectId: "almacen-papel" // IMPORTANTE: Asegúrate de que este es el ID de tu proyecto en Firebase
         };
         
         try {
             const app = initializeApp(firebaseConfig);
-            window.firebaseDb = getDatabase(app);
-            window.firebaseRef = ref;
-            window.firebaseOnValue = onValue;
-            window.firebaseSet = set;
-            console.log("Firebase initialized successfully");
+            window.firebaseDb = getFirestore(app);
+            window.firebaseCollection = collection;
+            window.firebaseDoc = doc;
+            window.firebaseOnSnapshot = onSnapshot;
+            window.firebaseSetDoc = setDoc;
+            window.firebaseGetDocs = getDocs;
+            console.log("Firestore initialized successfully");
         } catch (e) {
-            console.error("Error initializing Firebase", e);
+            console.error("Error initializing Firestore", e);
         }
     </script>
     <script type="module" src="app.js"></script>
