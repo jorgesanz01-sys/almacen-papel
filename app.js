@@ -1120,15 +1120,15 @@ async function handleInventoryExcelImport(e) {
         }
     }
 
-    // Índices fijos del Excel "sucio" de in2:
+    // Índices fijos del Excel in2:
     // [0]=Codigo  [3]=Proveedor  [6]=P.Costo(ubicacion)
-    // [8]=PrecioUnit  [9]=StockPliegos(resumen)  [12]=StockKg(resumen)
-    const COL_COD    = 0;
-    const COL_PROV   = 3;
-    const COL_UBI    = 6;
-    const COL_PRECIO = 8;   // precio unitario por pliego (solo en filas artículo)
-    const COL_PL     = 9;   // pliegos totales del pasillo (solo en fila resumen)
-    const COL_KG     = 12;  // kg totales del pasillo     (solo en fila resumen)
+    // [9]=Cantidad  [10]=Unidad(Pl/Kg)  [12]=Kilos
+    const COL_COD   = 0;
+    const COL_PROV  = 3;
+    const COL_UBI   = 6;
+    const COL_CANT  = 9;   // cantidad en unidad indicada en col 10
+    const COL_UNIT  = 10;  // "Kg" o "Pl"
+    const COL_KG    = 12;  // kilos
 
     function getAisleId(ubiRaw) {
         const u = String(ubiRaw || '').trim().toUpperCase();
@@ -1141,8 +1141,13 @@ async function handleInventoryExcelImport(e) {
         return null;
     }
 
-    // ── Primera pasada: agrupar por pasillo ───────────────────────────────────
-    const rawGroups = {};  // aisleId → { articles:[], totalPl:0, totalKg:0 }
+    function safeNum(v) {
+        const n = parseFloat(String(v || '').replace(',', '.'));
+        return isNaN(n) ? 0 : n;
+    }
+
+    const newAislesData = {};
+    let totalArticles = 0;
 
     for (let i = hdr + 1; i < rawRows.length; i++) {
         const row = rawRows[i];
@@ -1155,56 +1160,30 @@ async function handleInventoryExcelImport(e) {
         const aisleId = getAisleId(row[COL_UBI]);
         if (!aisleId) continue;
 
-        if (!rawGroups[aisleId]) rawGroups[aisleId] = { articles: [], totalPl: 0, totalKg: 0 };
+        if (!newAislesData[aisleId]) newAislesData[aisleId] = [];
 
-        const plVal = parseFloat(String(row[COL_PL] || '').replace(',','.')) || 0;
-        const kgVal = parseFloat(String(row[COL_KG] || '').replace(',','.')) || 0;
+        const prov   = String(row[COL_PROV] || '').trim().replace(/^nan$/i, '');
+        const cant   = safeNum(row[COL_CANT]);
+        const kg     = safeNum(row[COL_KG]);
+        const unit   = String(row[COL_UNIT] || '').trim().toLowerCase();
 
-        if (plVal > 0 || kgVal > 0) {
-            // Fila resumen: acumular totales
-            rawGroups[aisleId].totalPl += plVal;
-            rawGroups[aisleId].totalKg += kgVal;
-        } else {
-            // Fila artículo individual
-            const prov    = String(row[COL_PROV] || '').trim().replace(/^nan$/i, '');
-            const precio  = parseFloat(String(row[COL_PRECIO] || '').replace(',','.')) || 0;
-            const gramaje = extractGramaje(codigo);
-            const tipo    = prov.length > 5 ? prov : codigo.slice(0, 30);
+        // Si unidad es "pl" → cantidad son pliegos; si "kg" → cantidad son kilos
+        const hojas = unit === 'pl' ? Math.round(cant) : 0;
+        const kilos = unit === 'pl' ? Math.round(kg)   : Math.round(cant > 0 ? cant : kg);
 
-            rawGroups[aisleId].articles.push({
-                id:      codigo,
-                tipo:    tipo.substring(0, 80),
-                gramaje: gramaje,
-                proveedor: prov ? prov.split(' ')[0] : '-',
-                _precio: precio,   // campo temporal para distribución
-                kilos:  0,
-                hojas:  0,
-                fecha_entrada: 'Sincronizado Excel Web'
-            });
-        }
-    }
+        const gramaje = extractGramaje(codigo);
+        const tipo = prov.length > 5 ? prov : codigo.slice(0, 30);
 
-    // ── Segunda pasada: distribuir totales por precio proporcional ────────────
-    const newAislesData = {};
-    let totalArticles = 0;
-
-    for (const [aisleId, group] of Object.entries(rawGroups)) {
-        const { articles, totalPl, totalKg } = group;
-        if (!articles.length) continue;
-
-        if (totalPl > 0) {
-            const sumPrecios = articles.reduce((s, a) => s + a._precio, 0);
-            articles.forEach(a => {
-                const ratio = sumPrecios > 0 ? a._precio / sumPrecios : 1 / articles.length;
-                a.hojas = Math.round(ratio * totalPl);
-                a.kilos = Math.round(ratio * totalKg);
-            });
-        }
-
-        // Quitar campo temporal
-        articles.forEach(a => delete a._precio);
-        newAislesData[aisleId] = articles;
-        totalArticles += articles.length;
+        newAislesData[aisleId].push({
+            id:       codigo,
+            tipo:     tipo.substring(0, 80),
+            gramaje:  gramaje,
+            proveedor: prov ? prov.split(' ')[0] : '-',
+            kilos:    kilos,
+            hojas:    hojas,
+            fecha_entrada: 'Sincronizado Excel Web'
+        });
+        totalArticles++;
     }
 
     if (totalArticles === 0) {
@@ -1212,6 +1191,7 @@ async function handleInventoryExcelImport(e) {
         e.target.value = '';
         return;
     }
+
 
     // Actualizar allAislesData con los nuevos items
     Object.keys(newAislesData).forEach(aisleId => {
