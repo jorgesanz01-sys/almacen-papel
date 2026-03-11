@@ -304,6 +304,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         const db = window.firebaseDb;
         const colRef = window.firebaseCollection(db, 'almacen');
         
+        // Setup Force Sync button
+        const forceBtn = document.getElementById('force-sync-btn');
+        if(forceBtn) {
+            forceBtn.addEventListener('click', async () => {
+                const conf = confirm("¿Estás seguro de forzar la sobreescritura de TODOS los pasillos en la Nube con los datos base de tu último Excel (seed.json)? \n\nEsto borrará cualquier cambio hecho a mano en Firebase.");
+                if(conf) {
+                    statusInd.textContent = 'Forzando Recarga...';
+                    forceBtn.disabled = true;
+                    try {
+                        let promises = [];
+                        for (let aId in allAislesData) {
+                            const docRef = window.firebaseDoc(db, 'almacen', aId);
+                            promises.push(window.firebaseSetDoc(docRef, {
+                                items: allAislesData[aId].items || []
+                            }));
+                        }
+                        await Promise.all(promises);
+                        alert("¡Sincronización completada con éxito!");
+                        statusInd.textContent = 'En vivo (Firestore)';
+                    } catch(e) {
+                        alert("Error al sincronizar: " + e.message);
+                        statusInd.textContent = 'Error Firestore';
+                    }
+                    forceBtn.disabled = false;
+                }
+            });
+        }
+        
         let isFirstLoad = true;
         
         window.firebaseOnSnapshot(colRef, (snapshot) => {
