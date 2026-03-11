@@ -226,27 +226,52 @@ function showInspector(aisleData) {
     `;
 
     if (itemCount > 0) {
-        // Render a list/table of items
+        // Group items by code
+        const groupedItems = {};
+        aisleData.items.forEach(item => {
+            if (!groupedItems[item.id]) {
+                groupedItems[item.id] = {
+                    ...item,
+                    count: 0,
+                    totalKilos: 0,
+                    totalHojas: 0
+                };
+            }
+            groupedItems[item.id].count++;
+            groupedItems[item.id].totalKilos += (item.kilos || 0);
+            groupedItems[item.id].totalHojas += (item.hojas || 0);
+        });
+
+        const groups = Object.values(groupedItems);
+        // Sort groups by total kilos descending
+        groups.sort((a,b) => b.totalKilos - a.totalKilos);
+
         content += `<table class="items-table">
             <thead>
                 <tr>
-                    <th>Lote</th>
-                    <th>Tipo</th>
-                    <th>Gramaje</th>
-                    <th>Marca</th>
-                    <th>Peso</th>
+                    <th>Ref./Código</th>
+                    <th>Descripción</th>
+                    <th style="text-align:right">Hojas</th>
+                    <th style="text-align:right">Kilos</th>
+                    <th style="text-align:center">Palets Est.</th>
                 </tr>
             </thead>
             <tbody>`;
             
-        aisleData.items.forEach(item => {
+        groups.forEach(group => {
+            const paletsEst = (group.totalKilos / 600).toFixed(1);
+            
             content += `
                 <tr>
-                    <td style="color:var(--accent); font-weight: 500;">${item.id}</td>
-                    <td>${item.tipo}</td>
-                    <td>${item.gramaje}</td>
-                    <td>${item.proveedor}</td>
-                    <td>${item.kilos} kg</td>
+                    <td style="color:var(--accent); font-weight: 600; font-size: 12px;">${group.id}</td>
+                    <td style="font-size: 11px; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${group.tipo}">${group.tipo}</td>
+                    <td style="text-align:right; font-family: monospace;">${group.totalHojas.toLocaleString()}</td>
+                    <td style="text-align:right; font-family: monospace; color: #a1a1aa;">${group.totalKilos.toLocaleString()} kg</td>
+                    <td style="text-align:center;">
+                        <span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 12px; font-size: 11px;">
+                            ${paletsEst}
+                        </span>
+                    </td>
                 </tr>
             `;
         });

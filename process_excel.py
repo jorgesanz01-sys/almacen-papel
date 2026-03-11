@@ -17,6 +17,7 @@ try:
     col_desc = cols[1]
     col_ubi = cols[2]
     col_peso = 'Unnamed: 4'
+    col_stock = '---Stock ---'
     
     for index, row in df.iterrows():
         ubi_raw = str(row.get(col_ubi, ""))
@@ -56,7 +57,15 @@ try:
         peso = 0
         try:
             if not pd.isna(peso_val):
-                peso = round(float(peso_val), 2)
+                peso = round(float(peso_val))
+        except:
+            pass
+            
+        hojas = 0
+        stock_val = row.get(col_stock, 0)
+        try:
+            if not pd.isna(stock_val):
+                hojas = int(float(stock_val))
         except:
             pass
             
@@ -76,6 +85,7 @@ try:
             "gramaje": gramaje,
             "proveedor": marca,
             "kilos": peso,
+            "hojas": hojas,
             "fecha_entrada": "Sincronizado Excel"
         }
         
