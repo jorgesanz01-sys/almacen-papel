@@ -58,7 +58,7 @@ function calcTotalKilos(items) {
 function calcPalets(items) {
     if (!items || !items.length) return 0;
     return items.reduce((s, it) => {
-        const kg = Math.max(0, it.hojas || 0);
+        const kg = Math.max(0, it.kilos || 0);
         return s + (kg / getKgPerPalet(it.id));
     }, 0);
 }
@@ -101,9 +101,9 @@ function buildCatalog() {
                 proveedor: it.proveedor || '', totalKilos: 0, totalHojas: 0,
                 palets: 0, aisles: new Set()
             };
-            cat[it.id].totalKilos += Math.max(0, it.hojas || 0);
-            cat[it.id].totalHojas += Math.max(0, it.kilos || 0);
-            cat[it.id].palets     += Math.max(0, it.hojas || 0) / getKgPerPalet(it.id);
+            cat[it.id].totalKilos += Math.max(0, it.kilos || 0);
+            cat[it.id].totalHojas += Math.max(0, it.hojas || 0);
+            cat[it.id].palets     += Math.max(0, it.kilos || 0) / getKgPerPalet(it.id);
             cat[it.id].aisles.add(aisle.id);
         });
     });
@@ -263,8 +263,8 @@ function showInspector(aisleData) {
     const grouped = {};
     (aisleData.items || []).forEach(it => {
         if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0, totalHojas: 0 };
-        grouped[it.id].totalKilos += Math.max(0, it.hojas || 0);
-        grouped[it.id].totalHojas += Math.max(0, it.kilos || 0);
+        grouped[it.id].totalKilos += Math.max(0, it.kilos || 0);
+        grouped[it.id].totalHojas += Math.max(0, it.hojas || 0);
     });
     const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
 
@@ -343,7 +343,7 @@ function openEditModal(id) {
     const grouped = {};
     (aisle.items || []).forEach(it => {
         if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0 };
-        grouped[it.id].totalKilos += Math.max(0, it.hojas || 0);
+        grouped[it.id].totalKilos += Math.max(0, it.kilos || 0);
     });
     const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
 
