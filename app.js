@@ -51,7 +51,7 @@ function getKgPerPalet(refId) {
 function calcTotalKilos(items) {
     if (!items || !items.length) return 0;
     return items.reduce((s, it) => {
-        const kg = Math.max(0, it.kilos || 0);
+        const kg = Math.max(0, it.hojas || 0);
         return s + kg;
     }, 0);
 }
@@ -60,7 +60,7 @@ function calcTotalKilos(items) {
 function calcPalets(items) {
     if (!items || !items.length) return 0;
     return items.reduce((s, it) => {
-        const kg = Math.max(0, it.kilos || 0);
+        const kg = Math.max(0, it.hojas || 0);
         return s + (kg / getKgPerPalet(it.id));
     }, 0);
 }
@@ -89,9 +89,9 @@ function buildCatalog() {
                 proveedor: it.proveedor || '', totalKilos: 0, totalHojas: 0,
                 palets: 0, aisles: new Set()
             };
-            cat[it.id].totalKilos += Math.max(0, it.kilos || 0);
-            cat[it.id].totalHojas += Math.max(0, it.hojas || 0);
-            cat[it.id].palets     += Math.max(0, it.kilos || 0) / getKgPerPalet(it.id);
+            cat[it.id].totalKilos += Math.max(0, it.hojas || 0);
+            cat[it.id].totalHojas += Math.max(0, it.kilos || 0);
+            cat[it.id].palets     += Math.max(0, it.hojas || 0) / getKgPerPalet(it.id);
             cat[it.id].aisles.add(aisle.id);
         });
     });
@@ -249,8 +249,8 @@ function showInspector(aisleData) {
     const grouped = {};
     (aisleData.items || []).forEach(it => {
         if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0, totalHojas: 0 };
-        grouped[it.id].totalKilos += Math.max(0, it.kilos || 0);
-        grouped[it.id].totalHojas += Math.max(0, it.hojas || 0);
+        grouped[it.id].totalKilos += Math.max(0, it.hojas || 0);
+        grouped[it.id].totalHojas += Math.max(0, it.kilos || 0);
     });
     const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
 
@@ -506,8 +506,8 @@ function showArticleCard(ref) {
         const aisle = allAislesData[aid];
         if (!aisle) return null;
         const items = (aisle.items || []).filter(it => it.id === ref.id);
-        const kg    = items.reduce((s, it) => s + Math.max(0, it.kilos || 0), 0);
-        const hojas = items.reduce((s, it) => s + Math.max(0, it.hojas || 0), 0);
+        const kg    = items.reduce((s, it) => s + Math.max(0, it.hojas || 0), 0);
+        const hojas = items.reduce((s, it) => s + Math.max(0, it.kilos || 0), 0);
         const pal   = kg / kgPP;
         const cap   = getCapacity(aisle);
         const occ   = (calcPalets(aisle.items) / cap) * 100;
