@@ -26,7 +26,7 @@ try:
     
     # Buscar dinámicamente la columna de stock y peso
     col_stock  = next((c for c in cols if "stock" in str(c).lower()), cols[9] if len(cols) > 9 else None)
-    col_peso   = next((c for c in cols if "unnamed: 12" in str(c).lower() or "valor stock" in str(c).lower()), cols[12] if len(cols) > 12 else None)
+    col_peso   = cols[14] if len(cols) > 14 else (cols[12] if len(cols) > 12 else None)  # col 14 = valor kg real
     
     # Trackers for reporting
     imported_items = 0

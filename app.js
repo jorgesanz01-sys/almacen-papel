@@ -798,6 +798,57 @@ function renderMetrics() {
             </div>`;
         }).join('');
     }
+
+    // 5. Resumen por Área
+    const AREAS = [
+        { label: 'N1 Derecho',   ids: ['col-left'],    range: [1,17],    color: '#6366f1' },
+        { label: 'N1 Izquierdo', ids: ['col-left'],    range: [43,55],   color: '#8b5cf6' },
+        { label: 'N2 Derecho',   ids: ['col-center'],  range: [18,42],   color: '#0ea5e9' },
+        { label: 'N2 Central',   ids: ['col-center'],  range: [63,75],   color: '#06b6d4' },
+        { label: 'N2 Izquierdo', ids: ['col-center'],  range: [76,81],   color: '#14b8a6' },
+        { label: 'Digital',      ids: [],              extIds: ['DIGITAL'], color: '#f59e0b' },
+        { label: 'Taller',       ids: [],              extIds: ['TALLER'],  color: '#ef4444' },
+        { label: 'Monge',        ids: [],              extIds: ['MONGE'],   color: '#f97316' },
+    ];
+
+    const areasEl = document.getElementById('metrics-areas');
+    if (areasEl) {
+        const areaStats = AREAS.map(area => {
+            let kg = 0, pal = 0, refs = 0;
+            const areaKeys = area.extIds ? area.extIds : [];
+            if (area.range) {
+                const [rStart, rEnd] = [Math.min(...area.range), Math.max(...area.range)];
+                for (let n = rStart; n <= rEnd; n++) {
+                    const id = String(n).padStart(2,'0');
+                    const a = allAislesData[id];
+                    if (a && !isDisabled(a)) {
+                        kg  += calcTotalKilos(a.items);
+                        pal += calcPalets(a.items);
+                        refs += (a.items?.length||0);
+                    }
+                }
+            }
+            areaKeys.forEach(extId => {
+                const a = allAislesData[extId];
+                if (a && !isDisabled(a)) {
+                    kg  += calcTotalKilos(a.items);
+                    pal += calcPalets(a.items);
+                    refs += (a.items?.length||0);
+                }
+            });
+            return { ...area, kg, pal: Math.round(pal), refs };
+        });
+
+        areasEl.innerHTML = areaStats.map(a => `
+            <div class="area-card" style="border-color:${a.color}33;">
+                <div class="area-card-label" style="color:${a.color};">${a.label}</div>
+                <div class="area-card-stats">
+                    <div><span class="area-stat-val">${fmtNum(Math.round(a.kg))}</span><span class="area-stat-lbl">kg</span></div>
+                    <div><span class="area-stat-val">${fmtNum(a.pal)}</span><span class="area-stat-lbl">pal.</span></div>
+                    <div><span class="area-stat-val">${fmtNum(a.refs)}</span><span class="area-stat-lbl">refs</span></div>
+                </div>
+            </div>`).join('');
+    }
 }
 
 function goToAisle(id) {
@@ -1068,8 +1119,9 @@ async function handleInventoryExcelImport(e) {
         }
     }
 
-    // Columnas: 0=Codigo, 1=Descripcion, 3=Proveedor/Desc, 6=P.Costo(ubicacion), 9=Stock
-    const COL_COD = 0, COL_DESC = 1, COL_PROV = 3, COL_UBI = 6, COL_STOCK = 9;
+    // Columnas del Excel sucio:
+    // 0=Codigo, 1=Desc, 3=Proveedor, 6=P.Costo(ubicacion), 9=Stock(pliegos), 14=Valorkg
+    const COL_COD = 0, COL_DESC = 1, COL_PROV = 3, COL_UBI = 6, COL_STOCK = 9, COL_PESO = 14;
 
     const newAislesData = {};
     let imported = 0, ignored = 0;
@@ -1103,9 +1155,16 @@ async function handleInventoryExcelImport(e) {
 
         const desc = String(row[COL_DESC] || '').trim();
         const prov = String(row[COL_PROV] || '').trim();
+        
+        // Pliegos del stock (col 9)
         let hojas = 0;
-        try { hojas = parseInt(parseFloat(String(row[COL_STOCK] || '0')), 10); } catch(e) {}
+        try { hojas = parseInt(parseFloat(String(row[COL_STOCK] || '0')), 10); } catch(ex) {}
         if (isNaN(hojas)) hojas = 0;
+
+        // Kilos reales del valor stock (col 14)
+        let kilos = 0;
+        try { kilos = Math.round(parseFloat(String(row[COL_PESO] || '0'))); } catch(ex) {}
+        if (isNaN(kilos)) kilos = 0;
 
         const gramaje = extractGramaje(codigo);
         const tipo = (prov && prov.length > 5 && prov !== 'nan') ? prov : ((desc && desc !== 'nan') ? desc : 'Papel');
@@ -1115,7 +1174,7 @@ async function handleInventoryExcelImport(e) {
             tipo: tipo.substring(0, 80),
             gramaje: gramaje,
             proveedor: (prov && prov !== 'nan') ? prov.split(' ')[0] : '-',
-            kilos: 0,
+            kilos: kilos,
             hojas: hojas,
             fecha_entrada: 'Sincronizado Excel Web'
         });
