@@ -188,10 +188,11 @@ function renderWarehouse() {
                 const heat = disabled ? 'disabled' : getHeatmapClass(occ);
                 html += `
                     <div class="rack aisle-unit ${heat}" data-id="${aisle.id}"
-                         title="${disabled ? '⛔ Anulado' : `P${aisle.id} · ${pal} pal. · ${Math.round(occ)}%`}">
+                         title="${disabled ? '⛔ Anulado' : `P${aisle.id} · ${pal} pal. · ${Math.round(occ)}% · ${aisle.items.length} refs`}">
                         ${disabled ? '<i class="ri-forbid-line" style="font-size:10px;color:#4b5563;z-index:1;"></i>' : ''}
                         <span class="rack-id" style="${disabled?'color:#4b5563;':''}">${aisle.id}</span>
                         <span class="aisle-badge" style="${disabled?'color:#374151;':''}">${disabled ? 'anulado' : pal+' pal.'}</span>
+                        ${!disabled ? `<span class="aisle-refs">${aisle.items.length} ref${aisle.items.length !== 1 ? 's' : ''}</span>` : ''}
                     </div>`;
             });
 

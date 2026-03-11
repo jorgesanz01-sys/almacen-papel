@@ -443,7 +443,7 @@ body {
 
 /* ── RACK (PASILLO) ────────────────────────────────────────── */
 .rack {
-    height: 46px;
+    height: 58px;
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 5px;
     position: relative;
@@ -454,7 +454,7 @@ body {
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    gap: 1px;
+    gap: 0px;
 }
 
 .rack:hover {
@@ -488,7 +488,7 @@ body {
     color: var(--text-main);
     z-index: 1;
     font-family: var(--font-mono);
-    line-height: 1;
+    line-height: 1.1;
 }
 
 .aisle-badge {
@@ -496,7 +496,15 @@ body {
     color: rgba(255,255,255,0.65);
     z-index: 1;
     font-family: var(--font-mono);
-    line-height: 1;
+    line-height: 1.1;
+}
+
+.aisle-refs {
+    font-size: 9px;
+    color: rgba(255,255,255,0.4);
+    z-index: 1;
+    font-family: var(--font-mono);
+    line-height: 1.1;
 }
 
 /* Pasillos externos: fila compacta más estrecha */
