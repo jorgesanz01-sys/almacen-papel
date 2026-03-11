@@ -12,22 +12,16 @@ const WAREHOUSE_LAYOUT = [
     {
         id: 'col-left',
         blocks: [
-            { id: 'empty-top', type: 'empty' },
-            { id: 'nave2-izq', name: 'N2 Izquierdo', start: 81, end: 76 }
+            { id: 'nave1-der', name: 'N1 Derecho (1-17)', start: 1, end: 17 },
+            { id: 'nave1-izq', name: 'N1 Izquierdo (43-55)', start: 43, end: 55 }
         ]
     },
     {
         id: 'col-center',
         blocks: [
-            { id: 'nave1-izq', name: 'N1 Izquierdo', start: 43, end: 55 },
-            { id: 'nave2-cen', name: 'N2 Central', start: 63, end: 75 }
-        ]
-    },
-    {
-        id: 'col-right',
-        blocks: [
-            { id: 'nave1-der', name: 'N1 Derecho', start: 1, end: 17 },
-            { id: 'nave2-der', name: 'N2 Derecho', start: 18, end: 42 }
+            { id: 'nave2-der', name: 'N2 Derecho (18-42)', start: 18, end: 42 },
+            { id: 'nave2-cen', name: 'N2 Central (63-75)', start: 63, end: 75 },
+            { id: 'nave2-izq', name: 'N2 Izquierdo (81-76)', start: 81, end: 76 }
         ]
     },
     {
@@ -75,7 +69,7 @@ async function initMockData() {
                 
                 for (let i = block.start; isAsc ? i <= block.end : i >= block.end; i += step) {
                     const aisleId = String(i).padStart(2, '0');
-                    const maxCapacity = 20; // Default logical capacity per aisle for UI
+                    const maxCapacity = 24; // Default 24 palets per aisle
                     const items = localSeedData[aisleId] ? localSeedData[aisleId].items : [];
 
                     const aisleObj = { id: aisleId, capacity: maxCapacity, items: items, blockId: block.id };
@@ -131,18 +125,24 @@ function renderWarehouse() {
             `;
 
             block.aisles.forEach(aisle => {
-                const itemCount = aisle.items ? aisle.items.length : 0;
-                totalGlobalFilled += itemCount;
+                let totalKilos = 0;
+                if (aisle.items) {
+                    aisle.items.forEach(it => totalKilos += (it.kilos || 0));
+                }
+                const pallets = totalKilos / 600;
+                const roundedPallets = parseFloat(pallets.toFixed(1));
                 
-                const occupancyRate = (itemCount / aisle.capacity) * 100;
+                totalGlobalFilled += roundedPallets;
+                
+                const occupancyRate = (roundedPallets / aisle.capacity) * 100;
                 const heatClass = getHeatmapClass(occupancyRate);
                 
                 blockHtml += `
                     <div class="rack animate-rack ${heatClass} aisle-unit" 
                          data-id="${aisle.id}"
-                         title="Pasillo ${aisle.id}: ${itemCount} artículos">
-                        <span class="rack-id" style="font-size: 14px; font-weight: bold;">P${aisle.id}</span>
-                        <span class="aisle-badge">${itemCount} items</span>
+                         title="Pasillo ${aisle.id}: ${roundedPallets} palets est.">
+                        <span class="rack-id">P${aisle.id}</span>
+                        <span class="aisle-badge">${roundedPallets} palets</span>
                     </div>
                 `;
             });
@@ -206,8 +206,14 @@ function showInspector(aisleData) {
     const inspector = document.getElementById('inspector-panel');
     inspector.classList.add('wide-panel'); // We'll make it wider in CSS for list view
     
-    const itemCount = aisleData.items ? aisleData.items.length : 0;
-    const occupancyRate = (itemCount / aisleData.capacity) * 100;
+    let totalKilos = 0;
+    if (aisleData.items) {
+        aisleData.items.forEach(it => totalKilos += (it.kilos || 0));
+    }
+    const pallets = totalKilos / 600;
+    const roundedPallets = parseFloat(pallets.toFixed(1));
+
+    const occupancyRate = (roundedPallets / aisleData.capacity) * 100;
     const heatColor = getHeatmapColorHex(occupancyRate);
     
     let content = `
@@ -215,7 +221,7 @@ function showInspector(aisleData) {
             <div>
                 <h3 style="font-size: 24px; color: var(--accent);">Pasillo ${aisleData.id}</h3>
                 <span class="aisle-capacity" style="background: ${heatColor}33; color: ${heatColor}; display: inline-block; margin-top: 8px;">
-                    Ocupación: ${Math.round(occupancyRate)}% (${itemCount}/${aisleData.capacity})
+                    Ocupación: ${Math.round(occupancyRate)}% (${roundedPallets}/${aisleData.capacity} palets)
                 </span>
             </div>
             <button class="close-inspector" onclick="document.getElementById('inspector-panel').classList.remove('visible'); document.querySelectorAll('.aisle-unit.active').forEach(el => el.classList.remove('active'));">
