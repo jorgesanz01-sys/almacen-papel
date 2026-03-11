@@ -95,10 +95,28 @@ function buildCatalog() {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 async function initMockData() {
     loadConfig();
+    // Cargar seed.json
     try {
         const resp = await fetch('./seed.json');
         if (resp.ok) localSeedData = await resp.json();
     } catch(e) { console.log('No seed.json', e); }
+    // Cargar article_config.json (kg/palet desde Excel)
+    // Solo carga valores que NO estén ya en localStorage (localStorage tiene prioridad)
+    try {
+        const resp2 = await fetch('./article_config.json');
+        if (resp2.ok) {
+            const fileConfig = await resp2.json();
+            let merged = 0;
+            Object.entries(fileConfig).forEach(([refId, cfg]) => {
+                // Solo aplicar si no hay un valor manual en localStorage
+                if (!articleConfig[refId] || !articleConfig[refId].kgPerPalet) {
+                    getArticleCfg(refId).kgPerPalet = cfg.kgPerPalet;
+                    merged++;
+                }
+            });
+            if (merged > 0) console.log(`Cargados ${merged} kg/palet desde article_config.json`);
+        }
+    } catch(e) { console.log('No article_config.json', e); }
 
     WAREHOUSE_LAYOUT.forEach(col => col.blocks.forEach(block => {
         if (block.type === 'empty') return;
@@ -666,21 +684,24 @@ async function handleExcelImport(e) {
 
     if (!rows.length) { alert('El Excel parece vacío.'); return; }
 
-    // Detectar columnas automáticamente (busca cabeceras que contengan las palabras clave)
+    // Detectar columnas automáticamente
     const keys  = Object.keys(rows[0]);
-    const find  = (kw) => keys.find(k => k.toLowerCase().replace(/[\s_]/g,'').includes(kw.toLowerCase().replace(/[\s_]/g,'')));
+    const norm  = s => s.toLowerCase().replace(/[\s_\/]/g, '');
+    const find  = (kw) => keys.find(k => norm(k).includes(norm(kw)));
 
-    const colCod  = find('codigo') || find('id') || find('referencia') || find('ref') || keys[0];
-    const colKg   = find('kgpalet') || find('kg/palet') || find('kgpal') || find('kgporapalet') || find('pesopal');
+    // Busca la columna de código (varias variantes incluyendo "Codigo" con espacios como en este Excel)
+    const colCod = find('codigo') || find('referencia') || find('codarticulo') || find('ref') || keys[0];
+    // Busca la columna de kg/palet (incluye "kg/palet" exacto del inventario.xls)
+    const colKg  = find('kg/palet') || find('kgpalet') || find('kgpal') || find('pesopal') || find('kgporapalet') || find('pesopalet');
 
-    if (!colCod) { alert('No encuentro columna de código/referencia en el Excel.'); return; }
-    if (!colKg)  { alert(`No encuentro columna de Kg/palet. Columnas encontradas:\n${keys.join(', ')}\n\nRenombra la columna a "Kg/palet" e inténtalo de nuevo.`); return; }
+    if (!colCod) { alert('No encuentro columna de código/referencia.\nColumnas: ' + keys.join(', ')); return; }
+    if (!colKg)  { alert('No encuentro columna de Kg/palet.\nColumnas encontradas: ' + keys.join(', ') + '\n\nAsegúrate de que la columna se llame "kg/palet".'); return; }
 
     let updated = 0, skipped = 0;
     rows.forEach(row => {
-        const refId = String(row[colCod]).trim();
-        const kg    = parseFloat(String(row[colKg]).replace(',','.'));
-        if (!refId || isNaN(kg) || kg <= 0) { skipped++; return; }
+        const refId = String(row[colCod]).trim().replace(/\s+/g, ''); // quitar espacios del código
+        const kg    = parseFloat(String(row[colKg]).replace(',', '.'));
+        if (!refId || refId === '---Stock---' || isNaN(kg) || kg <= 0) { skipped++; return; }
         getArticleCfg(refId).kgPerPalet = kg;
         updated++;
     });
