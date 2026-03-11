@@ -381,29 +381,43 @@ function setupSearch() {
         results.slice(0, 12).forEach(r => {
             const item = document.createElement('div');
             item.className = 'search-dd-item';
-            const aisleList = r.aisles.map(a => `<span class="dd-aisle-tag">P${a}</span>`).join('');
+            const aisleList = r.aisles.map(a => `<span class="dd-aisle-tag dd-aisle-link" data-aisle="${a}">P${a}</span>`).join('');
             item.innerHTML = `
                 <div class="dd-main">
                     <span class="dd-tipo">${r.tipo}</span>
                     <span class="dd-code">${r.id}</span>
                 </div>
                 <div class="dd-meta">
-                    <span class="dd-kilos">${fmtNum(Math.round(r.totalKilos))} kg · ${r.palets.toFixed(1)} pal.</span>
+                    <span class="dd-kilos">${fmtNum(Math.round(r.totalKilos))} kg · ${r.palets.toFixed(1)} pal. total</span>
                     <div class="dd-aisles">${aisleList}</div>
                 </div>`;
+
+            // Clic en tag de pasillo → ir al pasillo directamente
+            item.querySelectorAll('.dd-aisle-link').forEach(tag => {
+                tag.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const aid = tag.getAttribute('data-aisle');
+                    inp.value = r.tipo;
+                    if (clearBtn) clearBtn.style.display = 'flex';
+                    hideDropdown();
+                    highlightAisles(new Set(r.aisles));
+                    const el = document.querySelector(`.aisle-unit[data-id="${aid}"]`);
+                    if (el) { document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active')); el.classList.add('active'); }
+                    showInspector(allAislesData[aid]);
+                });
+            });
+
+            // Clic en el item → abrir ficha completa del artículo
             item.addEventListener('click', e => {
+                if (e.target.closest('.dd-aisle-link')) return; // ya gestionado
                 e.stopPropagation();
                 inp.value = r.tipo;
                 if (clearBtn) clearBtn.style.display = 'flex';
                 hideDropdown();
                 highlightAisles(new Set(r.aisles));
-                // Si está en un solo pasillo, abrir inspector
-                if (r.aisles.length === 1) {
-                    const el = document.querySelector(`.aisle-unit[data-id="${r.aisles[0]}"]`);
-                    if (el) { document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active')); el.classList.add('active'); }
-                    showInspector(allAislesData[r.aisles[0]]);
-                }
+                showArticleCard(r);
             });
+
             dropdown.appendChild(item);
         });
         if (results.length > 12) {
@@ -458,6 +472,128 @@ function setupSearch() {
         if (!e.target.closest('#search-dropdown') && !e.target.closest('.sidebar-search')) hideDropdown();
     }, { capture: false });
 }
+
+// ─── FICHA DE ARTÍCULO (desde búsqueda) ──────────────────────────────────────
+function showArticleCard(ref) {
+    const panel = document.getElementById('inspector-panel');
+    panel.className = 'inspector-panel inspector-article';
+
+    const kgPP     = getKgPerPalet(ref.id);
+    const isCustom = !!(articleConfig[ref.id] && articleConfig[ref.id].kgPerPalet > 0);
+
+    // Desglose por pasillo
+    const aisleBreakdown = ref.aisles.map(aid => {
+        const aisle = allAislesData[aid];
+        if (!aisle) return null;
+        const items = (aisle.items || []).filter(it => it.id === ref.id);
+        const kg    = items.reduce((s, it) => s + Math.max(0, it.kilos || 0), 0);
+        const hojas = items.reduce((s, it) => s + Math.max(0, it.hojas || 0), 0);
+        const pal   = kg / kgPP;
+        const cap   = getCapacity(aisle);
+        const occ   = (calcPalets(aisle.items) / cap) * 100;
+        return { aid, kg, hojas, pal, occ, disabled: isDisabled(aisle) };
+    }).filter(Boolean).sort((a, b) => b.kg - a.kg);
+
+    let html = `
+        <div class="inspector-header">
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px;">
+                    <i class="ri-archive-2-line"></i> FICHA DE ARTÍCULO
+                </div>
+                <h3 class="insp-title" style="font-size:13px;line-height:1.35;">${ref.tipo}</h3>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:center;">
+                    <span class="insp-badge" style="background:rgba(99,102,241,0.12);color:var(--accent);">${ref.id}</span>
+                    ${ref.gramaje ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">${ref.gramaje}</span>` : ''}
+                    ${ref.proveedor ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">${ref.proveedor}</span>` : ''}
+                    <span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);">
+                        ${isCustom ? `<span style="color:var(--accent);font-weight:700;">${fmtNum(kgPP)}</span>` : fmtNum(kgPP)} kg/palet
+                    </span>
+                </div>
+            </div>
+            <button class="insp-action-btn btn-close" onclick="window.closeInspector()" title="Cerrar"><i class="ri-close-line"></i></button>
+        </div>
+
+        <!-- Totales -->
+        <div class="art-card-totals">
+            <div class="art-card-stat">
+                <span class="art-card-stat-val">${fmtNum(Math.round(ref.totalKilos))}</span>
+                <span class="art-card-stat-lbl">kg totales</span>
+            </div>
+            <div class="art-card-stat">
+                <span class="art-card-stat-val">${ref.palets.toFixed(1)}</span>
+                <span class="art-card-stat-lbl">palets est.</span>
+            </div>
+            <div class="art-card-stat">
+                <span class="art-card-stat-val">${fmtNum(ref.totalHojas)}</span>
+                <span class="art-card-stat-lbl">hojas</span>
+            </div>
+            <div class="art-card-stat">
+                <span class="art-card-stat-val">${aisleBreakdown.length}</span>
+                <span class="art-card-stat-lbl">${aisleBreakdown.length === 1 ? 'pasillo' : 'pasillos'}</span>
+            </div>
+        </div>
+
+        <!-- Desglose por pasillo -->
+        <div class="items-list-container">
+            <div style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono);letter-spacing:.6px;text-transform:uppercase;margin-bottom:8px;">
+                Distribución por pasillo
+            </div>
+            <table class="items-table">
+                <thead><tr>
+                    <th>Pasillo</th>
+                    <th style="text-align:right">Kg</th>
+                    <th style="text-align:right">Hojas</th>
+                    <th style="text-align:right">Pal. est.</th>
+                    <th>Ocup. pasillo</th>
+                </tr></thead>
+                <tbody>`;
+
+    aisleBreakdown.forEach(row => {
+        const col  = getHeatmapColorHex(row.occ);
+        const pct  = Math.round(row.occ);
+        html += `<tr style="cursor:pointer;" onclick="window.goToAisleFromCard('${row.aid}')">
+            <td>
+                <span class="dd-aisle-tag" style="cursor:pointer;">P${row.aid}</span>
+                ${row.disabled ? '<span style="color:#6b7280;font-size:10px;margin-left:4px;">anulado</span>' : ''}
+            </td>
+            <td style="text-align:right;font-family:var(--font-mono);font-size:11px;">${fmtNum(Math.round(row.kg))}</td>
+            <td style="text-align:right;font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">${fmtNum(row.hojas)}</td>
+            <td style="text-align:right;">
+                <span class="pal-badge">${row.pal.toFixed(1)}</span>
+            </td>
+            <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;min-width:50px;">
+                        <div style="height:4px;border-radius:2px;background:${col};width:${Math.min(pct,100)}%;"></div>
+                    </div>
+                    <span style="font-size:10px;color:${col};font-family:var(--font-mono);font-weight:700;min-width:28px;">${pct}%</span>
+                </div>
+            </td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    panel.innerHTML = html;
+    panel.classList.add('visible');
+}
+
+window.goToAisleFromCard = function(id) {
+    window.closeInspector();
+    setTimeout(() => {
+        // Cambiar a vista mapa si no estamos en ella
+        const mapBtn = document.querySelector('[data-view="map"]');
+        if (mapBtn && !document.getElementById('view-map').style.display.includes('flex')) mapBtn.click();
+        setTimeout(() => {
+            const el = document.querySelector(`.aisle-unit[data-id="${id}"]`);
+            if (el) {
+                document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
+                el.classList.add('active');
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                showInspector(allAislesData[id]);
+            }
+        }, 80);
+    }, 50);
+};
 
 // ─── NAVEGACIÓN ───────────────────────────────────────────────────────────────
 function setupNavigation() {

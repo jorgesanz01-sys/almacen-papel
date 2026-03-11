@@ -1103,3 +1103,57 @@ body {
     width: 160px;
 }
 .art-search-input::placeholder { color: var(--text-muted); }
+
+/* ── FICHA DE ARTÍCULO (desde búsqueda) ──────────────────── */
+.inspector-article .inspector-header {
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    padding-bottom: 14px;
+    margin-bottom: 0;
+}
+
+.art-card-totals {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 16px;
+    flex-shrink: 0;
+}
+
+.art-card-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 10px 6px;
+}
+
+.art-card-stat-val {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.art-card-stat-lbl {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    font-family: var(--font-mono);
+}
+
+/* Tags pasillo clicables en dropdown */
+.dd-aisle-link {
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+.dd-aisle-link:hover {
+    background: rgba(99,102,241,0.35) !important;
+    color: #fff !important;
+}
