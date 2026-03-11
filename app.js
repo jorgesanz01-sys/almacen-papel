@@ -264,7 +264,7 @@ function showInspector(aisleData) {
         html += `<table class="items-table">
             <thead><tr>
                 <th>Código</th><th>Descripción</th>
-                <th style="text-align:right">Hojas</th>
+                <th style="text-align:right">Pliegos</th>
                 <th style="text-align:right">Kg</th>
                 <th style="text-align:right">Kg/pal</th>
                 <th style="text-align:center">Pal. est.</th>
@@ -525,7 +525,7 @@ function showArticleCard(ref) {
             </div>
             <div class="art-card-stat">
                 <span class="art-card-stat-val">${fmtNum(ref.totalHojas)}</span>
-                <span class="art-card-stat-lbl">hojas</span>
+                <span class="art-card-stat-lbl">pliegos</span>
             </div>
             <div class="art-card-stat">
                 <span class="art-card-stat-val">${aisleBreakdown.length}</span>
@@ -542,7 +542,7 @@ function showArticleCard(ref) {
                 <thead><tr>
                     <th>Pasillo</th>
                     <th style="text-align:right">Kg</th>
-                    <th style="text-align:right">Hojas</th>
+                    <th style="text-align:right">Pliegos</th>
                     <th style="text-align:right">Pal. est.</th>
                     <th>Ocup. pasillo</th>
                 </tr></thead>
