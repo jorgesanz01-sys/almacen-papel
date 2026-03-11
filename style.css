@@ -306,28 +306,40 @@ body {
 /* GRID SYSTEM */
 .warehouse-grid {
     flex: 1;
-    display: grid;
-    /* 4 Column layout to fit everything and external on the right */
-    grid-template-columns: repeat(4, minmax(150px, 1fr));
-    justify-content: center;
-    gap: 16px;
-    overflow-y: auto;
-    padding-right: 10px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 24px;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding-bottom: 20px;
 }
 
 .warehouse-grid::-webkit-scrollbar {
+    height: 10px;
     width: 6px;
 }
 .warehouse-grid::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.1);
-    border-radius: 3px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 5px;
 }
 
 .layout-column {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    min-width: 250px;
+    width: 280px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.layout-column::-webkit-scrollbar {
+    width: 4px;
+}
+.layout-column::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
 }
 
 .layout-block {
