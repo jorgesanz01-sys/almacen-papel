@@ -12,15 +12,13 @@ try:
 
     # Columnas reales del Excel in2:
     # [0] Codigo   [3] Proveedor   [6] P.Costo (ubicacion "C28 lote:1")
-    # [9] Cantidad (Kg si unidad es Kg, Pliegos si unidad es Pl)
-    # [10] Unidad ("Kg" o "Pl")
-    # [12] Kilos totales
+    # [9]  J = Kilos
+    # [12] M = Hojas (pliegos)
     COL_COD   = cols[0]
     COL_PROV  = cols[3]
     COL_UBI   = cols[6]
-    COL_CANT  = cols[9]   # cantidad en la unidad indicada en col 10
-    COL_UNIT  = cols[10]  # "Kg" o "Pl"
-    COL_KG    = cols[12]  # kilos
+    COL_KG    = cols[9]   # J = kilos
+    COL_HOJAS = cols[12]  # M = hojas/pliegos
 
     def get_aisle_id(ubi_raw):
         u = str(ubi_raw).strip().upper()
@@ -75,17 +73,11 @@ try:
         prov = str(row[COL_PROV]).strip()
         if prov.lower() == 'nan': prov = ''
 
-        cant  = safe_float(row[COL_CANT])
-        kg    = safe_float(row[COL_KG])
-        unit  = str(row[COL_UNIT]).strip().lower()
+        cant  = safe_float(row[COL_KG])     # J = kilos
+        kg    = safe_float(row[COL_HOJAS])  # M = hojas
 
-        # Si unidad es "pl" la cantidad son pliegos, si es "kg" son kilos
-        if unit == 'pl':
-            hojas = int(cant)
-            kilos = int(kg)
-        else:
-            hojas = 0
-            kilos = int(cant) if cant > 0 else int(kg)
+        hojas = int(kg)    # M = pliegos
+        kilos = int(cant)  # J = kilos
 
         gramaje = extract_gramaje(codigo)
         tipo = prov if len(prov) > 5 else (codigo[:30] if codigo else 'Papel')

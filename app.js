@@ -1122,13 +1122,12 @@ async function handleInventoryExcelImport(e) {
 
     // Índices fijos del Excel in2:
     // [0]=Codigo  [3]=Proveedor  [6]=P.Costo(ubicacion)
-    // [9]=Cantidad  [10]=Unidad(Pl/Kg)  [12]=Kilos
+    // [9]=J=Kilos   [12]=M=Hojas(pliegos)
     const COL_COD   = 0;
     const COL_PROV  = 3;
     const COL_UBI   = 6;
-    const COL_CANT  = 9;   // cantidad en unidad indicada en col 10
-    const COL_UNIT  = 10;  // "Kg" o "Pl"
-    const COL_KG    = 12;  // kilos
+    const COL_KG    = 9;   // J = kilos
+    const COL_HOJAS = 12;  // M = hojas/pliegos
 
     function getAisleId(ubiRaw) {
         const u = String(ubiRaw || '').trim().toUpperCase();
@@ -1163,13 +1162,8 @@ async function handleInventoryExcelImport(e) {
         if (!newAislesData[aisleId]) newAislesData[aisleId] = [];
 
         const prov   = String(row[COL_PROV] || '').trim().replace(/^nan$/i, '');
-        const cant   = safeNum(row[COL_CANT]);
-        const kg     = safeNum(row[COL_KG]);
-        const unit   = String(row[COL_UNIT] || '').trim().toLowerCase();
-
-        // Si unidad es "pl" → cantidad son pliegos; si "kg" → cantidad son kilos
-        const hojas = unit === 'pl' ? Math.round(cant) : 0;
-        const kilos = unit === 'pl' ? Math.round(kg)   : Math.round(cant > 0 ? cant : kg);
+        const kilos  = Math.round(safeNum(row[COL_KG]));
+        const hojas  = Math.round(safeNum(row[COL_HOJAS]));
 
         const gramaje = extractGramaje(codigo);
         const tipo = prov.length > 5 ? prov : codigo.slice(0, 30);
