@@ -800,48 +800,49 @@ function renderMetrics() {
     }
 
     // 5. Resumen por Área
+    const AREA_DEFS = [
+        { label: 'N1 Derecho',    range: [1,17],   color: '#6366f1' },
+        { label: 'N1 Izquierdo',  range: [43,55],  color: '#8b5cf6' },
+        { label: 'N2 Derecho',    range: [18,42],  color: '#0ea5e9' },
+        { label: 'N2 Central',    range: [63,75],  color: '#06b6d4' },
+        { label: 'N2 Izquierdo',  range: [76,81],  color: '#14b8a6' },
+        { label: 'Digital',       extIds: ['DIGITAL'], color: '#f59e0b' },
+        { label: 'Taller',        extIds: ['TALLER'],  color: '#ef4444' },
+    ];
     const AREAS = [
-        { label: 'N1 Derecho',   ids: ['col-left'],    range: [1,17],    color: '#6366f1' },
-        { label: 'N1 Izquierdo', ids: ['col-left'],    range: [43,55],   color: '#8b5cf6' },
-        { label: 'N2 Derecho',   ids: ['col-center'],  range: [18,42],   color: '#0ea5e9' },
-        { label: 'N2 Central',   ids: ['col-center'],  range: [63,75],   color: '#06b6d4' },
-        { label: 'N2 Izquierdo', ids: ['col-center'],  range: [76,81],   color: '#14b8a6' },
-        { label: 'Digital',      ids: [],              extIds: ['DIGITAL'], color: '#f59e0b' },
-        { label: 'Taller',       ids: [],              extIds: ['TALLER'],  color: '#ef4444' },
-        { label: 'Monge',        ids: [],              extIds: ['MONGE'],   color: '#f97316' },
+        // Primero el total propio
+        { label: '🏭 Almacén ZGZ', all: true, color: '#22d3ee', bold: true },
+        // Luego desglose
+        ...AREA_DEFS,
+        // Externo separado
+        { label: '📦 Monge (ext.)', extIds: ['MONGE'], color: '#f97316' },
     ];
 
     const areasEl = document.getElementById('metrics-areas');
     if (areasEl) {
         const areaStats = AREAS.map(area => {
             let kg = 0, pal = 0, refs = 0;
-            const areaKeys = area.extIds ? area.extIds : [];
-            if (area.range) {
-                const [rStart, rEnd] = [Math.min(...area.range), Math.max(...area.range)];
-                for (let n = rStart; n <= rEnd; n++) {
-                    const id = String(n).padStart(2,'0');
-                    const a = allAislesData[id];
-                    if (a && !isDisabled(a)) {
-                        kg  += calcTotalKilos(a.items);
-                        pal += calcPalets(a.items);
-                        refs += (a.items?.length||0);
+            // all:true → sumar todos los AREA_DEFS (N1+N2+Digital+Taller, sin Monge)
+            const defsToSum = area.all ? AREA_DEFS : [area];
+            defsToSum.forEach(def => {
+                if (def.range) {
+                    const [rStart, rEnd] = [Math.min(...def.range), Math.max(...def.range)];
+                    for (let n = rStart; n <= rEnd; n++) {
+                        const a = allAislesData[String(n).padStart(2,'0')];
+                        if (a && !isDisabled(a)) { kg += calcTotalKilos(a.items); pal += calcPalets(a.items); refs += (a.items?.length||0); }
                     }
                 }
-            }
-            areaKeys.forEach(extId => {
-                const a = allAislesData[extId];
-                if (a && !isDisabled(a)) {
-                    kg  += calcTotalKilos(a.items);
-                    pal += calcPalets(a.items);
-                    refs += (a.items?.length||0);
-                }
+                (def.extIds || []).forEach(extId => {
+                    const a = allAislesData[extId];
+                    if (a && !isDisabled(a)) { kg += calcTotalKilos(a.items); pal += calcPalets(a.items); refs += (a.items?.length||0); }
+                });
             });
             return { ...area, kg, pal: Math.round(pal), refs };
         });
 
         areasEl.innerHTML = areaStats.map(a => `
-            <div class="area-card" style="border-color:${a.color}33;">
-                <div class="area-card-label" style="color:${a.color};">${a.label}</div>
+            <div class="area-card${a.bold ? ' area-card-total' : ''}" style="border-color:${a.color}${a.bold ? '88' : '33'};">
+                <div class="area-card-label" style="color:${a.color};${a.bold ? 'font-size:12px;font-weight:800;' : ''}">${a.label}</div>
                 <div class="area-card-stats">
                     <div><span class="area-stat-val">${fmtNum(Math.round(a.kg))}</span><span class="area-stat-lbl">kg</span></div>
                     <div><span class="area-stat-val">${fmtNum(a.pal)}</span><span class="area-stat-lbl">pal.</span></div>

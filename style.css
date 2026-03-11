@@ -1423,3 +1423,13 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
+
+/* Tarjeta total Almacén ZGZ */
+.area-card-total {
+    background: rgba(34, 211, 238, 0.07);
+    grid-column: 1 / -1;  /* ocupa todo el ancho */
+}
+.area-card-total .area-stat-val {
+    font-size: 16px;
+    color: #22d3ee;
+}
