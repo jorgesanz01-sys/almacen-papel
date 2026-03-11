@@ -399,7 +399,7 @@ body {
 /* ── RACKS GRID ────────────────────────────────────────────── */
 .racks-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
     gap: 3px;
 }
 
@@ -410,7 +410,7 @@ body {
 
 /* ── RACK (PASILLO) ────────────────────────────────────────── */
 .rack {
-    height: 38px;
+    height: 44px;
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 5px;
     position: relative;
@@ -466,9 +466,9 @@ body {
     line-height: 1;
 }
 
-/* Pasillos externos: más altos para ser legibles en columna única */
+/* Pasillos externos: fila compacta */
 .single-col .rack {
-    height: 42px;
+    height: 34px;
     flex-direction: row;
     justify-content: space-between;
     padding: 0 10px;
@@ -483,8 +483,8 @@ body {
     right: 20px;
     top: 50%;
     transform: translateY(-50%) translateX(110%);
-    width: 520px;
-    max-height: 80vh;
+    width: 740px;
+    max-height: 90vh;
     background: rgba(14, 16, 22, 0.97);
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255,255,255,0.1);
@@ -500,7 +500,7 @@ body {
 }
 
 .inspector-panel.wide-panel {
-    width: 520px;
+    width: 740px;
 }
 
 .inspector-panel.visible {
@@ -717,8 +717,8 @@ body {
 
 /* ── INSPECTOR MEJORADO ───────────────────────────────────────── */
 .inspector-panel {
-    width: 600px !important;
-    max-height: 85vh !important;
+    width: 740px !important;
+    max-height: 90vh !important;
 }
 
 .insp-title {
@@ -757,7 +757,7 @@ body {
 
 /* Tabla mejorada */
 .ref-code { color: var(--accent); font-weight: 700; font-size: 10px; white-space: nowrap; font-family: var(--font-mono); }
-.ref-desc  { font-size: 11px; max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ref-desc  { font-size: 11px; }
 .pal-badge { background: rgba(255,255,255,0.08); padding: 1px 8px; border-radius: 10px; font-size: 10px; font-family: var(--font-mono); }
 .empty-state { text-align: center; padding: 50px 0; color: var(--text-muted); }
 .empty-state i { font-size: 32px; opacity: .3; display: block; margin-bottom: 10px; }
@@ -788,7 +788,7 @@ body {
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 16px;
     width: 540px;
-    max-height: 80vh;
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 32px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.15);
@@ -924,3 +924,42 @@ body {
     transition: var(--transition);
 }
 .btn-secondary:hover { background: rgba(255,255,255,0.1); color: var(--text-main); }
+
+/* ── SEARCH CLEAR BUTTON ──────────────────────────────────── */
+.search-clear-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    width: 18px; height: 18px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: var(--transition);
+    opacity: 0.7;
+}
+.search-clear-btn:hover { color: var(--text-main); opacity: 1; }
+
+/* ── COLUMNA EXTERNA MÁS ESTRECHA ────────────────────────── */
+.layout-column:last-child {
+    flex: 0 0 160px;
+    min-width: 0;
+}
+
+.layout-column:last-child .layout-block {
+    padding: 5px;
+}
+
+.layout-column:last-child .aisle-title {
+    font-size: 9px;
+}
+
+/* Inspector: descripción completa, sin cortar */
+.items-table td.ref-desc {
+    white-space: normal;
+    word-break: break-word;
+    max-width: 260px;
+    line-height: 1.35;
+}

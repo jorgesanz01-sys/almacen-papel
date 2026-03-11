@@ -407,9 +407,22 @@ window.resetAisleCfg = function(id) {
 // ─── BÚSQUEDA ─────────────────────────────────────────────────────────────────
 function setupSearch() {
     const inp = document.getElementById('search-input');
+    const clearBtn = document.getElementById('search-clear');
     if (!inp) return;
+
+    function clearSearch() {
+        inp.value = '';
+        inp.dispatchEvent(new Event('input'));
+        window.closeInspector();
+        inp.focus();
+    }
+
+    if (clearBtn) clearBtn.addEventListener('click', clearSearch);
+
     inp.addEventListener('input', e => {
         const q = e.target.value.trim().toLowerCase();
+        // Mostrar/ocultar X según haya texto
+        if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
         if (!q) {
             document.querySelectorAll('.aisle-unit').forEach(el => { el.style.opacity = '1'; el.style.outline = ''; });
             return;
@@ -438,7 +451,7 @@ function setupSearch() {
         }
     });
     inp.addEventListener('keydown', e => {
-        if (e.key === 'Escape') { inp.value = ''; inp.dispatchEvent(new Event('input')); window.closeInspector(); }
+        if (e.key === 'Escape') clearSearch();
     });
 }
 
