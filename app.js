@@ -1093,7 +1093,6 @@ async function handleInventoryExcelImport(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Cargar SheetJS si no está
     if (!window.XLSX) {
         await new Promise((res, rej) => {
             const s = document.createElement('script');
@@ -1108,81 +1107,108 @@ async function handleInventoryExcelImport(e) {
     const ws   = wb.Sheets[wb.SheetNames[0]];
     const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-    if (!rawRows || rawRows.length < 6) { alert('El Excel parece vacío o no tiene el formato correcto.'); return; }
+    if (!rawRows || rawRows.length < 6) {
+        alert('El Excel parece vacío o no tiene el formato correcto.');
+        return;
+    }
 
-    // Buscar la fila de cabeceras (donde aparece "Codigo")
-    let headerRowIndex = 0;
+    // Buscar fila de cabeceras
+    let hdr = 0;
     for (let i = 0; i < 10; i++) {
         if (rawRows[i] && rawRows[i].some(v => String(v).toLowerCase().includes('codigo'))) {
-            headerRowIndex = i;
-            break;
+            hdr = i; break;
         }
     }
 
-    // Columnas del Excel sucio:
-    // 0=Codigo, 1=Desc, 3=Proveedor, 6=P.Costo(ubicacion), 9=Stock(pliegos), 14=Valorkg
-    const COL_COD = 0, COL_DESC = 1, COL_PROV = 3, COL_UBI = 6, COL_STOCK = 9, COL_PESO = 14;
+    // Índices fijos del Excel "sucio" de in2:
+    // [0]=Codigo  [3]=Proveedor  [6]=P.Costo(ubicacion)
+    // [8]=PrecioUnit  [9]=StockPliegos(resumen)  [12]=StockKg(resumen)
+    const COL_COD    = 0;
+    const COL_PROV   = 3;
+    const COL_UBI    = 6;
+    const COL_PRECIO = 8;   // precio unitario por pliego (solo en filas artículo)
+    const COL_PL     = 9;   // pliegos totales del pasillo (solo en fila resumen)
+    const COL_KG     = 12;  // kg totales del pasillo     (solo en fila resumen)
 
-    const newAislesData = {};
-    let imported = 0, ignored = 0;
+    function getAisleId(ubiRaw) {
+        const u = String(ubiRaw || '').trim().toUpperCase();
+        if (!u || u === 'NAN') return null;
+        if (u.includes('TALLER'))  return 'TALLER';
+        if (u.includes('MONGE'))   return 'MONGE';
+        if (u.includes('DIGITAL')) return 'DIGITAL';
+        const m = u.match(/^C(\d+)/);
+        if (m) { const n = parseInt(m[1]); if (n >= 1 && n <= 99) return String(n).padStart(2,'0'); }
+        return null;
+    }
 
-    for (let i = headerRowIndex + 1; i < rawRows.length; i++) {
+    // ── Primera pasada: agrupar por pasillo ───────────────────────────────────
+    const rawGroups = {};  // aisleId → { articles:[], totalPl:0, totalKg:0 }
+
+    for (let i = hdr + 1; i < rawRows.length; i++) {
         const row = rawRows[i];
         if (!row || row.length === 0) continue;
 
         const codigo = String(row[COL_COD] || '').trim();
-        if (!codigo || codigo.toLowerCase().includes('codigo') || codigo.toLowerCase().includes('total listado') || codigo === 'nan') continue;
+        if (!codigo || codigo.toLowerCase().includes('codigo') ||
+            codigo.toLowerCase().includes('total listado') || codigo === 'nan') continue;
 
-        const ubiRaw = String(row[COL_UBI] || '').trim().toUpperCase();
-        if (!ubiRaw || ubiRaw === 'NAN' || ubiRaw === 'UNDEFINED') { ignored++; continue; }
+        const aisleId = getAisleId(row[COL_UBI]);
+        if (!aisleId) continue;
 
-        // Determinar ID de ubicación
-        let aisleId = null;
-        if (ubiRaw.includes('TALLER'))      aisleId = 'TALLER';
-        else if (ubiRaw.includes('MONGE'))   aisleId = 'MONGE';
-        else if (ubiRaw.includes('DIGITAL')) aisleId = 'DIGITAL';
-        else {
-            const m = ubiRaw.match(/^C(\d+)/);
-            if (m) {
-                const num = parseInt(m[1], 10);
-                if (num >= 1 && num <= 99) aisleId = String(num).padStart(2, '0');
-            }
+        if (!rawGroups[aisleId]) rawGroups[aisleId] = { articles: [], totalPl: 0, totalKg: 0 };
+
+        const plVal = parseFloat(String(row[COL_PL] || '').replace(',','.')) || 0;
+        const kgVal = parseFloat(String(row[COL_KG] || '').replace(',','.')) || 0;
+
+        if (plVal > 0 || kgVal > 0) {
+            // Fila resumen: acumular totales
+            rawGroups[aisleId].totalPl += plVal;
+            rawGroups[aisleId].totalKg += kgVal;
+        } else {
+            // Fila artículo individual
+            const prov    = String(row[COL_PROV] || '').trim().replace(/^nan$/i, '');
+            const precio  = parseFloat(String(row[COL_PRECIO] || '').replace(',','.')) || 0;
+            const gramaje = extractGramaje(codigo);
+            const tipo    = prov.length > 5 ? prov : codigo.slice(0, 30);
+
+            rawGroups[aisleId].articles.push({
+                id:      codigo,
+                tipo:    tipo.substring(0, 80),
+                gramaje: gramaje,
+                proveedor: prov ? prov.split(' ')[0] : '-',
+                _precio: precio,   // campo temporal para distribución
+                kilos:  0,
+                hojas:  0,
+                fecha_entrada: 'Sincronizado Excel Web'
+            });
         }
-
-        if (!aisleId) { ignored++; continue; }
-
-        if (!newAislesData[aisleId]) newAislesData[aisleId] = [];
-
-        const desc = String(row[COL_DESC] || '').trim();
-        const prov = String(row[COL_PROV] || '').trim();
-        
-        // Pliegos del stock (col 9)
-        let hojas = 0;
-        try { hojas = parseInt(parseFloat(String(row[COL_STOCK] || '0')), 10); } catch(ex) {}
-        if (isNaN(hojas)) hojas = 0;
-
-        // Kilos reales del valor stock (col 14)
-        let kilos = 0;
-        try { kilos = Math.round(parseFloat(String(row[COL_PESO] || '0'))); } catch(ex) {}
-        if (isNaN(kilos)) kilos = 0;
-
-        const gramaje = extractGramaje(codigo);
-        const tipo = (prov && prov.length > 5 && prov !== 'nan') ? prov : ((desc && desc !== 'nan') ? desc : 'Papel');
-
-        newAislesData[aisleId].push({
-            id: codigo,
-            tipo: tipo.substring(0, 80),
-            gramaje: gramaje,
-            proveedor: (prov && prov !== 'nan') ? prov.split(' ')[0] : '-',
-            kilos: kilos,
-            hojas: hojas,
-            fecha_entrada: 'Sincronizado Excel Web'
-        });
-        imported++;
     }
 
-    if (imported === 0) {
-        alert('No se han encontrado artículos válidos en el Excel. Revisa que el formato sea correcto.');
+    // ── Segunda pasada: distribuir totales por precio proporcional ────────────
+    const newAislesData = {};
+    let totalArticles = 0;
+
+    for (const [aisleId, group] of Object.entries(rawGroups)) {
+        const { articles, totalPl, totalKg } = group;
+        if (!articles.length) continue;
+
+        if (totalPl > 0) {
+            const sumPrecios = articles.reduce((s, a) => s + a._precio, 0);
+            articles.forEach(a => {
+                const ratio = sumPrecios > 0 ? a._precio / sumPrecios : 1 / articles.length;
+                a.hojas = Math.round(ratio * totalPl);
+                a.kilos = Math.round(ratio * totalKg);
+            });
+        }
+
+        // Quitar campo temporal
+        articles.forEach(a => delete a._precio);
+        newAislesData[aisleId] = articles;
+        totalArticles += articles.length;
+    }
+
+    if (totalArticles === 0) {
+        alert('No se han encontrado artículos válidos en el Excel.');
         e.target.value = '';
         return;
     }
@@ -1206,8 +1232,8 @@ async function handleInventoryExcelImport(e) {
 
     invalidateCatalog();
     renderWarehouse();
-    addLog('sync', `Inventario importado: ${imported} artículos en ${Object.keys(newAislesData).length} pasillos`);
-    alert(`✅ Inventario importado correctamente:\n• ${imported} artículos importados\n• ${Object.keys(newAislesData).length} pasillos actualizados\n• ${ignored} filas ignoradas`);
+    addLog('sync', `Inventario importado: ${totalArticles} artículos en ${Object.keys(newAislesData).length} pasillos`);
+    alert(`✅ Inventario importado correctamente:\n• ${totalArticles} artículos importados\n• ${Object.keys(newAislesData).length} pasillos actualizados`);
     e.target.value = '';
 }
 
