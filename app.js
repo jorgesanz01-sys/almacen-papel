@@ -29,51 +29,60 @@ const WAREHOUSE_LAYOUT = [
             { id: 'nave1-der', name: 'N1 Derecho', start: 1, end: 17 },
             { id: 'nave2-der', name: 'N2 Derecho', start: 18, end: 42 }
         ]
+    },
+    {
+        id: 'col-external',
+        blocks: [
+            { id: 'taller', name: 'Taller', isExternal: true, extId: 'TALLER' },
+            { id: 'monge', name: 'Monge', isExternal: true, extId: 'MONGE' },
+            { id: 'otros', name: 'Sin Clasificar', isExternal: true, extId: 'OTROS' }
+        ]
     }
 ];
 
 // Global state mapping Aisle ID -> { id, capacity, items: [] }
 const allAislesData = {};
 let totalGlobalCapacity = 0;
+let localSeedData = {};
 
-function initMockData() {
+
+async function initMockData() {
+    try {
+        const resp = await fetch('./seed.json');
+        if (resp.ok) {
+            localSeedData = await resp.json();
+            console.log("Cargados datos base de seed.json");
+        }
+    } catch(e) { console.log("No seed.json found", e); }
+
     WAREHOUSE_LAYOUT.forEach(col => {
         col.blocks.forEach(block => {
             if (block.type === 'empty') return;
             const aislesList = [];
-            const isAsc = block.start <= block.end;
-            const step = isAsc ? 1 : -1;
             
-            for (let i = block.start; isAsc ? i <= block.end : i >= block.end; i += step) {
-                const aisleId = String(i).padStart(2, '0');
-                const maxCapacity = 20; // Default capacity per aisle for visualization
-                const items = [];
+            if (block.isExternal) {
+                const aisleId = block.extId;
+                const maxCapacity = 500; // Arbitrary large capacity for externals
+                const items = localSeedData[aisleId] ? localSeedData[aisleId].items : [];
                 
-                // Randomly assign items to the aisle
-                const itemCount = Math.floor(Math.random() * (maxCapacity + 1));
-                
-                for(let j=0; j<itemCount; j++) {
-                    const randomType = mockPaperTypes[Math.floor(Math.random() * mockPaperTypes.length)];
-                    items.push({
-                        id: `BOB-${Math.floor(Math.random() * 90000) + 10000}`,
-                        tipo: randomType.type,
-                        gramaje: randomType.gramaje,
-                        proveedor: randomType.marca,
-                        kilos: Math.floor(Math.random() * 800) + 200,
-                        fecha_entrada: new Date(Date.now() - Math.floor(Math.random() * 10000000000)).toLocaleDateString()
-                    });
-                }
-
-                const aisleObj = {
-                    id: aisleId,
-                    capacity: maxCapacity,
-                    items: items,
-                    blockId: block.id
-                };
-
+                const aisleObj = { id: aisleId, capacity: maxCapacity, items: items, blockId: block.id };
                 aislesList.push(aisleObj);
                 allAislesData[aisleId] = aisleObj;
                 totalGlobalCapacity += maxCapacity;
+            } else {
+                const isAsc = block.start <= block.end;
+                const step = isAsc ? 1 : -1;
+                
+                for (let i = block.start; isAsc ? i <= block.end : i >= block.end; i += step) {
+                    const aisleId = String(i).padStart(2, '0');
+                    const maxCapacity = 20; // Default logical capacity per aisle for UI
+                    const items = localSeedData[aisleId] ? localSeedData[aisleId].items : [];
+
+                    const aisleObj = { id: aisleId, capacity: maxCapacity, items: items, blockId: block.id };
+                    aislesList.push(aisleObj);
+                    allAislesData[aisleId] = aisleObj;
+                    totalGlobalCapacity += maxCapacity;
+                }
             }
             block.aisles = aislesList;
         });
@@ -258,8 +267,8 @@ function showInspector(aisleData) {
     inspector.classList.add('visible');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    initMockData();
+document.addEventListener('DOMContentLoaded', async () => {
+    await initMockData();
     renderWarehouse();
     
     // Check if Firestore is available
@@ -274,11 +283,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         window.firebaseOnSnapshot(colRef, (snapshot) => {
             if (snapshot.empty && isFirstLoad && window.firebaseSetDoc) {
-                // Database is completely empty. Let's auto-seed it with our mock data
-                console.log("Colección de Firestore vacía. Sembrando con datos iniciales...");
+                // Database is completely empty. Let's auto-seed it with our excel data
+                console.log("Colección de Firestore vacía. Sembrando con datos del Excel...");
+                statusInd.textContent = 'Volcando Excel a Base de Datos...';
                 
                 let promises = [];
                 for (let aId in allAislesData) {
+                    // Only dump aisles that actually have items, to save quota and speed things up!
+                    // Wait, no, we might want empty aisles so they are ready
                     const docRef = window.firebaseDoc(db, 'almacen', aId);
                     promises.push(window.firebaseSetDoc(docRef, {
                         items: allAislesData[aId].items || []
