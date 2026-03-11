@@ -264,8 +264,8 @@ function showInspector(aisleData) {
         html += `<table class="items-table">
             <thead><tr>
                 <th>Código</th><th>Descripción</th>
-                <th style="text-align:right">Kg</th>
                 <th style="text-align:right">Pliegos</th>
+                <th style="text-align:right">Kg</th>
                 <th style="text-align:right">Kg/pal</th>
                 <th style="text-align:center">Pal. est.</th>
             </tr></thead><tbody>`;
@@ -276,8 +276,8 @@ function showInspector(aisleData) {
             html += `<tr>
                 <td class="ref-code">${g.id}</td>
                 <td class="ref-desc">${g.tipo}</td>
-                <td style="text-align:right;font-size:11px;color:#9ca3af;">${fmtNum(Math.round(g.totalKilos))}</td>
                 <td style="text-align:right;font-size:11px;">${fmtNum(g.totalHojas)}</td>
+                <td style="text-align:right;font-size:11px;color:#9ca3af;">${fmtNum(Math.round(g.totalKilos))}</td>
                 <td style="text-align:right;font-size:11px;">
                     <span style="${isCustom?'color:var(--accent);font-weight:700;':'color:#6b7280;'}">${fmtNum(kgPP)}</span>
                 </td>
