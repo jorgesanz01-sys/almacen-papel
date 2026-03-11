@@ -390,7 +390,7 @@ body {
 }
 
 .rack {
-    height: 32px;
+    height: 64px;
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.05);
     border-radius: 6px;
@@ -398,9 +398,31 @@ body {
     cursor: pointer;
     transition: var(--transition);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     overflow: hidden;
+}
+
+.rack:hover, .rack.active {
+    transform: scale(1.02);
+    z-index: 2;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    border-color: rgba(255,255,255,0.4);
+}
+
+.rack.active {
+    box-shadow: 0 0 0 2px var(--accent);
+}
+
+.aisle-badge {
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    z-index: 1;
+    margin-top: 4px;
+    background: rgba(0,0,0,0.4);
+    padding: 2px 6px;
+    border-radius: 10px;
 }
 
 .rack:hover {
@@ -449,6 +471,54 @@ body {
 .inspector-panel.visible {
     transform: translateX(0);
     opacity: 1;
+}
+
+.inspector-panel.wide-panel {
+    width: 600px; /* Wider for tables */
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.items-list-container {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.items-list-container::-webkit-scrollbar {
+    width: 6px;
+}
+.items-list-container::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+}
+
+.items-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.items-table th {
+    text-align: left;
+    padding: 12px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-muted);
+    font-weight: 500;
+    position: sticky;
+    top: 0;
+    background: rgba(20, 23, 31, 0.95);
+}
+
+.items-table td {
+    padding: 12px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    color: var(--text-main);
+}
+
+.items-table tr:hover td {
+    background: rgba(255,255,255,0.03);
 }
 
 .inspector-header {

@@ -1,3 +1,4 @@
+// app.js - Refactored for entire Aisle occupancy logic
 const mockPaperTypes = [
     { type: 'Estucado Brillo', gramaje: '135g', marca: 'Creator' },
     { type: 'Offset Blanco', gramaje: '90g', marca: 'Soporset' },
@@ -5,10 +6,8 @@ const mockPaperTypes = [
     { type: 'Estucado Mate', gramaje: '150g', marca: 'Garda' }
 ];
 
-// Layout mapping based on the drawing provided:
-// 3 Columns. Left is empty at top, starts at 81 down to 76.
-// Center has 43-55 top, 63-75 bottom.
-// Right has 1-17 top, 18-42 bottom.
+// Map layout. Aisles are the atomic units now, not bins.
+// We give each aisle a 'capacity' (e.g., max number of items it can hold, purely logical for now)
 const WAREHOUSE_LAYOUT = [
     {
         id: 'col-left',
@@ -33,46 +32,50 @@ const WAREHOUSE_LAYOUT = [
     }
 ];
 
-const allRacksData = {};
-let totalCapacity = 0;
+// Global state mapping Aisle ID -> { id, capacity, items: [] }
+const allAislesData = {};
+let totalGlobalCapacity = 0;
 
 function initMockData() {
     WAREHOUSE_LAYOUT.forEach(col => {
         col.blocks.forEach(block => {
             if (block.type === 'empty') return;
-            const racks = [];
+            const aislesList = [];
             const isAsc = block.start <= block.end;
             const step = isAsc ? 1 : -1;
             
             for (let i = block.start; isAsc ? i <= block.end : i >= block.end; i += step) {
-                const isOccupied = Math.random() > 0.3; // 70% chance of occupied
-                let itemData = null;
-
-                if (isOccupied) {
+                const aisleId = String(i).padStart(2, '0');
+                const maxCapacity = 20; // Default capacity per aisle for visualization
+                const items = [];
+                
+                // Randomly assign items to the aisle
+                const itemCount = Math.floor(Math.random() * (maxCapacity + 1));
+                
+                for(let j=0; j<itemCount; j++) {
                     const randomType = mockPaperTypes[Math.floor(Math.random() * mockPaperTypes.length)];
-                    itemData = {
+                    items.push({
                         id: `BOB-${Math.floor(Math.random() * 90000) + 10000}`,
                         tipo: randomType.type,
                         gramaje: randomType.gramaje,
                         proveedor: randomType.marca,
-                        kilos: Math.floor(Math.random() * 800) + 200 + ' kg',
+                        kilos: Math.floor(Math.random() * 800) + 200,
                         fecha_entrada: new Date(Date.now() - Math.floor(Math.random() * 10000000000)).toLocaleDateString()
-                    };
+                    });
                 }
 
-                const rackObj = {
-                    position: String(i).padStart(2, '0'),
-                    isOccupied,
-                    item: itemData,
+                const aisleObj = {
+                    id: aisleId,
+                    capacity: maxCapacity,
+                    items: items,
                     blockId: block.id
                 };
 
-                racks.push(rackObj);
-                allRacksData[rackObj.position] = rackObj;
-                totalCapacity++;
+                aislesList.push(aisleObj);
+                allAislesData[aisleId] = aisleObj;
+                totalGlobalCapacity += maxCapacity;
             }
-            block.racks = racks;
-            block.capacity = racks.length;
+            block.aisles = aislesList;
         });
     });
 }
@@ -93,7 +96,7 @@ function renderWarehouse() {
     const gridEl = document.getElementById('warehouse-grid');
     gridEl.innerHTML = '';
     
-    let totalFilled = 0;
+    let totalGlobalFilled = 0;
 
     WAREHOUSE_LAYOUT.forEach(col => {
         const colEl = document.createElement('div');
@@ -104,43 +107,46 @@ function renderWarehouse() {
             
             if (block.type === 'empty') {
                 blockEl.className = 'layout-block empty-block';
-                // Spacer height corresponding to roughly 17 racks (N1 right side height)
                 blockEl.style.minHeight = '600px'; 
                 colEl.appendChild(blockEl);
                 return;
             }
 
-            const filledInBlock = block.racks.filter(r => r.isOccupied).length;
-            totalFilled += filledInBlock;
-            const occupancyRate = (filledInBlock / block.capacity) * 100;
-            const heatColor = getHeatmapColorHex(occupancyRate);
-
             blockEl.className = 'layout-block';
-            blockEl.innerHTML = `
+            let blockHtml = `
                 <div class="aisle-header">
                     <span class="aisle-title">${block.name}</span>
-                    <span class="aisle-capacity" style="background: ${heatColor}33; color: ${heatColor}">
-                        ${Math.round(occupancyRate)}% (${filledInBlock}/${block.capacity})
-                    </span>
                 </div>
                 <div class="racks-container single-col">
-                    ${block.racks.map(rack => `
-                        <div class="rack animate-rack ${rack.isOccupied ? 'full' : 'empty'}" 
-                             data-pos="${rack.position}"
-                             title="Hueco: ${rack.position}">
-                            <span class="rack-id">${rack.position}</span>
-                        </div>
-                    `).join('')}
-                </div>
             `;
+
+            block.aisles.forEach(aisle => {
+                const itemCount = aisle.items ? aisle.items.length : 0;
+                totalGlobalFilled += itemCount;
+                
+                const occupancyRate = (itemCount / aisle.capacity) * 100;
+                const heatClass = getHeatmapClass(occupancyRate);
+                
+                blockHtml += `
+                    <div class="rack animate-rack ${heatClass} aisle-unit" 
+                         data-id="${aisle.id}"
+                         title="Pasillo ${aisle.id}: ${itemCount} artículos">
+                        <span class="rack-id" style="font-size: 14px; font-weight: bold;">P${aisle.id}</span>
+                        <span class="aisle-badge">${itemCount} items</span>
+                    </div>
+                `;
+            });
+
+            blockHtml += `</div>`;
+            blockEl.innerHTML = blockHtml;
             colEl.appendChild(blockEl);
         });
 
         gridEl.appendChild(colEl);
     });
 
-    updateGlobalMetrics(totalFilled, totalCapacity);
-    attachRackListeners();
+    updateGlobalMetrics(totalGlobalFilled, totalGlobalCapacity);
+    attachAisleListeners();
 }
 
 function updateGlobalMetrics(filled, total) {
@@ -156,74 +162,98 @@ function updateGlobalMetrics(filled, total) {
     globalProgressEl.style.backgroundColor = color;
 }
 
-function attachRackListeners() {
-    const racks = document.querySelectorAll('.rack');
+function attachAisleListeners() {
+    const aislesUnits = document.querySelectorAll('.aisle-unit');
     const inspector = document.getElementById('inspector-panel');
 
-    racks.forEach(rackEl => {
-        rackEl.addEventListener('mouseenter', (e) => {
-            const pos = e.currentTarget.getAttribute('data-pos');
-            const rackData = allRacksData[pos];
-            if (rackData) showInspector(rackData);
+    aislesUnits.forEach(aisleEl => {
+        aisleEl.addEventListener('click', (e) => {
+            // Stop propagation to avoid immediate closing by global document click
+            e.stopPropagation();
+            
+            // Remove active class from all
+            document.querySelectorAll('.aisle-unit.active').forEach(el => el.classList.remove('active'));
+            
+            // Add active to current
+            e.currentTarget.classList.add('active');
+            
+            const aisleId = e.currentTarget.getAttribute('data-id');
+            const aisleData = allAislesData[aisleId];
+            if (aisleData) showInspector(aisleData);
         });
     });
 
+    // We can also click to pin the inspector
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('.rack') && !e.target.closest('.inspector-panel')) {
+        if (!e.target.closest('.aisle-unit') && !e.target.closest('.inspector-panel')) {
             inspector.classList.remove('visible');
+            document.querySelectorAll('.aisle-unit.active').forEach(el => el.classList.remove('active'));
         }
     });
 }
 
-function showInspector(rackData) {
+function showInspector(aisleData) {
     const inspector = document.getElementById('inspector-panel');
+    inspector.classList.add('wide-panel'); // We'll make it wider in CSS for list view
+    
+    const itemCount = aisleData.items ? aisleData.items.length : 0;
+    const occupancyRate = (itemCount / aisleData.capacity) * 100;
+    const heatColor = getHeatmapColorHex(occupancyRate);
     
     let content = `
         <div class="inspector-header">
-            <h3>Hueco ${rackData.position}</h3>
-            <button class="close-inspector" onclick="document.getElementById('inspector-panel').classList.remove('visible')">
+            <div>
+                <h3 style="font-size: 24px; color: var(--accent);">Pasillo ${aisleData.id}</h3>
+                <span class="aisle-capacity" style="background: ${heatColor}33; color: ${heatColor}; display: inline-block; margin-top: 8px;">
+                    Ocupación: ${Math.round(occupancyRate)}% (${itemCount}/${aisleData.capacity})
+                </span>
+            </div>
+            <button class="close-inspector" onclick="document.getElementById('inspector-panel').classList.remove('visible'); document.querySelectorAll('.aisle-unit.active').forEach(el => el.classList.remove('active'));">
                 <i class="ri-close-line"></i>
             </button>
         </div>
+        
+        <div class="items-list-container">
     `;
 
-    if (rackData.isOccupied && rackData.item) {
-        content += `
-            <div class="item-detail">
-                <span class="item-label">Lote / Registro</span>
-                <span class="item-value" style="color:var(--accent)">${rackData.item.id}</span>
-            </div>
-            <div class="item-detail">
-                <span class="item-label">Tipo</span>
-                <span class="item-value">${rackData.item.tipo}</span>
-            </div>
-            <div class="item-detail">
-                <span class="item-label">Gramaje</span>
-                <span class="item-value">${rackData.item.gramaje}</span>
-            </div>
-            <div class="item-detail">
-                <span class="item-label">Marca</span>
-                <span class="item-value">${rackData.item.proveedor}</span>
-            </div>
-            <div class="item-detail">
-                <span class="item-label">Peso aprox.</span>
-                <span class="item-value">${rackData.item.kilos}</span>
-            </div>
-            <div class="item-detail">
-                <span class="item-label">Fecha Alta</span>
-                <span class="item-value">${rackData.item.fecha_entrada}</span>
-            </div>
-        `;
+    if (itemCount > 0) {
+        // Render a list/table of items
+        content += `<table class="items-table">
+            <thead>
+                <tr>
+                    <th>Lote</th>
+                    <th>Tipo</th>
+                    <th>Gramaje</th>
+                    <th>Marca</th>
+                    <th>Peso</th>
+                </tr>
+            </thead>
+            <tbody>`;
+            
+        aisleData.items.forEach(item => {
+            content += `
+                <tr>
+                    <td style="color:var(--accent); font-weight: 500;">${item.id}</td>
+                    <td>${item.tipo}</td>
+                    <td>${item.gramaje}</td>
+                    <td>${item.proveedor}</td>
+                    <td>${item.kilos} kg</td>
+                </tr>
+            `;
+        });
+        
+        content += `</tbody></table>`;
     } else {
         content += `
-            <div style="text-align:center; padding: 20px 0; color: var(--text-muted)">
-                <i class="ri-checkbox-blank-circle-line" style="font-size: 24px; color: var(--heat-empty);"></i>
-                <p style="margin-top: 8px;">Ubicación Libre</p>
-                <p style="font-size: 12px; margin-top: 4px;">Lista para alojar entrada</p>
+            <div style="text-align:center; padding: 40px 0; color: var(--text-muted)">
+                <i class="ri-delete-bin-3-line" style="font-size: 32px; color: var(--heat-empty);"></i>
+                <p style="margin-top: 12px; font-size: 16px;">Pasillo Vacío</p>
+                <p style="font-size: 13px; margin-top: 6px;">No hay ningún artículo registrado en este pasillo.</p>
             </div>
         `;
     }
 
+    content += `</div>`;
     inspector.innerHTML = content;
     inspector.classList.add('visible');
 }
@@ -238,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statusInd.textContent = 'Conectando a Firebase...';
         
         const db = window.firebaseDb;
-        const warehouseRef = window.firebaseRef(db, 'warehouse');
+        const warehouseRef = window.firebaseRef(db, 'almacen');
         
         let isFirstLoad = true;
         
@@ -247,26 +277,30 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (data) {
                 // Real data received! Merge it into our local state mapping
-                Object.keys(data).forEach(pos => {
-                    if (allRacksData[pos]) {
-                        allRacksData[pos].isOccupied = data[pos].isOccupied || false;
-                        allRacksData[pos].item = data[pos].item || null;
+                // Data structure expected: { "01": { items: [...] }, "02": { items: [...] } }
+                Object.keys(data).forEach(aisleId => {
+                    if (allAislesData[aisleId]) {
+                        // Ensure we always have an array
+                        const incomingItems = data[aisleId].items;
+                        allAislesData[aisleId].items = Array.isArray(incomingItems) ? incomingItems : (incomingItems ? Object.values(incomingItems) : []);
                     }
                 });
                 statusInd.textContent = 'En vivo (Firebase)';
                 renderWarehouse();
+                
+                // If inspector is open, refresh it
+                const activeAisle = document.querySelector('.aisle-unit.active');
+                if (activeAisle) {
+                    const id = activeAisle.getAttribute('data-id');
+                    showInspector(allAislesData[id]);
+                }
             } else if (isFirstLoad && window.firebaseSet) {
-                // Database is completely empty. Let's auto-seed it with our mock data
-                // so the user has something visually impressive immediately
                 console.log("Base de datos vacía. Sembrando con datos iniciales...");
                 
-                // Convert allRacksData array-like values to a plain object
                 const seedData = {};
-                for (let pos in allRacksData) {
-                    seedData[pos] = {
-                        position: allRacksData[pos].position,
-                        isOccupied: allRacksData[pos].isOccupied,
-                        item: allRacksData[pos].item
+                for (let aId in allAislesData) {
+                    seedData[aId] = {
+                        items: allAislesData[aId].items || []
                     };
                 }
                 
@@ -279,40 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, (error) => {
             console.error("Error al escuchar Firebase:", error);
             statusInd.textContent = 'Error Firebase (Usando Local)';
-            startSimulation();
         });
         
-    } else {
-        // Fallback if not connected to Firebase
-        startSimulation();
     }
 });
-
-function startSimulation() {
-    // Simulate real-time updates for that WOW factor locally
-    setInterval(() => {
-        const positions = Object.keys(allRacksData);
-        if (positions.length === 0) return;
-
-        const randomPos = positions[Math.floor(Math.random() * positions.length)];
-        const rack = allRacksData[randomPos];
-        
-        if (rack.isOccupied) {
-            rack.isOccupied = false;
-            rack.item = null;
-        } else {
-            rack.isOccupied = true;
-            const randomType = mockPaperTypes[Math.floor(Math.random() * mockPaperTypes.length)];
-            rack.item = {
-                id: `BOB-${Math.floor(Math.random() * 90000) + 10000}`,
-                tipo: randomType.type,
-                gramaje: randomType.gramaje,
-                proveedor: randomType.marca,
-                kilos: Math.floor(Math.random() * 800) + 200 + ' kg',
-                fecha_entrada: new Date().toLocaleDateString()
-            };
-        }
-
-        renderWarehouse();
-    }, 4500);
-}
