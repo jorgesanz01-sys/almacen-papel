@@ -401,12 +401,18 @@ body {
 /* ── BLOQUES ───────────────────────────────────────────────── */
 .layout-block {
     background: var(--bg-block);
-    border: 1px solid var(--glass-border);
+    border: 1.5px solid rgba(30, 80, 160, 0.55);
     border-radius: 8px;
     padding: 6px;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.layout-block:hover {
+    border-color: #f97316;
+    box-shadow: 0 0 10px rgba(249, 115, 22, 0.25);
 }
 
 .empty-block { visibility: hidden; pointer-events: none; }
@@ -434,6 +440,12 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
     gap: 3px;
+}
+
+/* N2 Izquierdo alineado a la derecha */
+.racks-container.align-right {
+    justify-content: end;
+    grid-template-columns: repeat(auto-fill, 56px);
 }
 
 .racks-container.single-col {
@@ -911,6 +923,72 @@ body {
     flex-direction: column;
     box-shadow: 0 32px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.15);
 }
+
+/* Versión más ancha para pasillo con artículos */
+.edit-modal-wide {
+    width: 680px;
+}
+
+/* Lista de artículos en el modal */
+.edit-articles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 320px;
+    overflow-y: auto;
+    padding-right: 4px;
+    margin-top: 6px;
+}
+.edit-articles-list::-webkit-scrollbar { width: 3px; }
+.edit-articles-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.edit-article-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    transition: border-color 0.15s;
+}
+.edit-article-row:hover { border-color: rgba(99,102,241,0.3); }
+
+.edit-article-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.edit-article-code {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-weight: 700;
+    white-space: nowrap;
+}
+.edit-article-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.edit-article-kg {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.edit-article-kg .edit-input {
+    width: 72px;
+    padding: 4px 6px;
+    font-size: 11px;
+}
+
 
 .edit-modal-header {
     display: flex;

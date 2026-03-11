@@ -11,7 +11,7 @@ const WAREHOUSE_LAYOUT = [
     { id: 'col-center',   blocks: [
         { id: 'nave2-der', name: 'N2 Derecho (18-42)',   start: 18, end: 42 },
         { id: 'nave2-cen', name: 'N2 Central (63-75)',   start: 63, end: 75 },
-        { id: 'nave2-izq', name: 'N2 Izquierdo (81-76)', start: 81, end: 76 }
+        { id: 'nave2-izq', name: 'N2 Izquierdo (81-76)', start: 81, end: 76, alignRight: true }
     ]}
 ];
 
@@ -177,7 +177,7 @@ function renderWarehouse() {
 
             blockEl.className = 'layout-block';
             let html = `<div class="aisle-header"><span class="aisle-title">${block.name}</span></div>
-                        <div class="racks-container ${block.isExternal ? 'single-col' : ''}">`;
+                        <div class="racks-container ${block.isExternal ? 'single-col' : ''} ${block.alignRight ? 'align-right' : ''}">`;
 
             block.aisles.forEach(aisle => {
                 const disabled = isDisabled(aisle);
@@ -339,11 +339,38 @@ function openEditModal(id) {
     const cfg   = getAisleCfg(id);
     const cap   = cfg.capacity || aisle.capacity;
 
+    // Agrupar items por ref para mostrar en el modal
+    const grouped = {};
+    (aisle.items || []).forEach(it => {
+        if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0 };
+        grouped[it.id].totalKilos += Math.max(0, it.hojas || 0);
+    });
+    const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
+
+    let articlesHtml = rows.length === 0
+        ? `<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Sin artículos en este pasillo</div>`
+        : rows.map(g => {
+            const kgPP = getKgPerPalet(g.id);
+            const isCustom = !!(articleConfig[g.id] && articleConfig[g.id].kgPerPalet > 0);
+            return `<div class="edit-article-row">
+                <div class="edit-article-info">
+                    <span class="edit-article-code">${esc(g.id)}</span>
+                    <span class="edit-article-desc">${esc(g.tipo)}</span>
+                </div>
+                <div class="edit-article-kg">
+                    <label style="font-size:10px;color:var(--text-muted);">Kg/pal</label>
+                    <input type="number" class="edit-input kgpal-input" data-ref="${esc(g.id)}"
+                        min="1" max="9999" value="${kgPP}"
+                        style="${isCustom?'border-color:var(--accent);color:var(--accent);':''}">
+                </div>
+            </div>`;
+        }).join('');
+
     const modal = document.getElementById('edit-modal');
     modal.innerHTML = `
-        <div class="edit-modal-box">
+        <div class="edit-modal-box edit-modal-wide">
             <div class="edit-modal-header">
-                <h3><i class="ri-settings-3-line"></i> Configurar Pasillo ${id}</h3>
+                <h3><i class="ri-settings-3-line"></i> Pasillo ${id}</h3>
                 <button class="insp-action-btn btn-close" data-action="close"><i class="ri-close-line"></i></button>
             </div>
             <div class="edit-modal-body">
@@ -353,8 +380,8 @@ function openEditModal(id) {
                     <span class="edit-hint">Por defecto: ${aisle.capacity} palets</span>
                 </div>
                 <div class="edit-section">
-                    <label class="edit-label">Kg/palet por artículo</label>
-                    <span class="edit-hint">Configura en el <strong>Menú Artículos</strong> → columna Kg/pal</span>
+                    <label class="edit-label">Artículos en el pasillo <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(edita Kg/palet de cada uno)</span></label>
+                    <div class="edit-articles-list">${articlesHtml}</div>
                 </div>
             </div>
             <div class="edit-modal-footer">
@@ -362,7 +389,6 @@ function openEditModal(id) {
                 <button class="btn-primary" data-action="save"><i class="ri-save-line"></i> Guardar</button>
             </div>
         </div>`;
-    // Stop propagation on the box to prevent modal backdrop click from closing
     modal.querySelector('.edit-modal-box')?.addEventListener('click', e => e.stopPropagation());
     modal.querySelector('[data-action="close"]')?.addEventListener('click', closeEditModal);
     modal.querySelector('[data-action="reset"]')?.addEventListener('click', () => resetAisleCfg(id));
@@ -375,8 +401,19 @@ function saveEditModal(id) {
     const v   = parseInt(document.getElementById('edit-capacity').value);
     if (v > 0) cfg.capacity = v;
     saveAisleConfig();
-    addLog('edit', `P${id} — capacidad actualizada a ${v}`, id);
+
+    // Guardar kg/palet de cada artículo editado
+    let updatedArticles = 0;
+    document.querySelectorAll('#edit-modal .kgpal-input').forEach(inp => {
+        const refId = inp.getAttribute('data-ref');
+        const kg = parseFloat(inp.value);
+        if (refId && kg > 0) { getArticleCfg(refId).kgPerPalet = kg; updatedArticles++; }
+    });
+    if (updatedArticles > 0) saveArticleConfig();
+
+    addLog('edit', `P${id} — capacidad ${v}, ${updatedArticles} kg/pal actualizados`, id);
     closeEditModal();
+    invalidateCatalog();
     renderWarehouse();
     showInspector(allAislesData[id]);
 }
