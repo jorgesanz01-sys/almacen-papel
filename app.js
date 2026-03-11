@@ -317,8 +317,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         let promises = [];
                         for (let aId in allAislesData) {
                             const docRef = window.firebaseDoc(db, 'almacen', aId);
+                            const excelItems = localSeedData[aId] ? localSeedData[aId].items : [];
                             promises.push(window.firebaseSetDoc(docRef, {
-                                items: allAislesData[aId].items || []
+                                items: excelItems
                             }));
                         }
                         await Promise.all(promises);
