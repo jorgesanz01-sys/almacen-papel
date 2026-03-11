@@ -1,27 +1,27 @@
-// app.js - Corregido: bugs de itemCount, listeners duplicados, búsqueda, kilos negativos
+// app.js — StoreMap · Almacén de Papel
 
 const WAREHOUSE_LAYOUT = [
     {
         id: 'col-left',
         blocks: [
-            { id: 'nave1-der', name: 'N1 Derecho (1-17)', start: 1, end: 17 },
+            { id: 'nave1-der', name: 'N1 Derecho (1-17)',   start: 1,  end: 17 },
             { id: 'nave1-izq', name: 'N1 Izquierdo (43-55)', start: 43, end: 55 }
         ]
     },
     {
         id: 'col-center',
         blocks: [
-            { id: 'nave2-der', name: 'N2 Derecho (18-42)', start: 18, end: 42 },
-            { id: 'nave2-cen', name: 'N2 Central (63-75)', start: 63, end: 75 },
+            { id: 'nave2-der', name: 'N2 Derecho (18-42)',  start: 18, end: 42 },
+            { id: 'nave2-cen', name: 'N2 Central (63-75)',  start: 63, end: 75 },
             { id: 'nave2-izq', name: 'N2 Izquierdo (81-76)', start: 81, end: 76 }
         ]
     },
     {
         id: 'col-external',
         blocks: [
-            { id: 'taller', name: 'Taller', isExternal: true, extId: 'TALLER' },
-            { id: 'monge', name: 'Monge', isExternal: true, extId: 'MONGE' },
-            { id: 'otros', name: 'Sin Clasificar', isExternal: true, extId: 'OTROS' }
+            { id: 'taller', name: 'Taller',         isExternal: true, extId: 'TALLER' },
+            { id: 'monge',  name: 'Monge',          isExternal: true, extId: 'MONGE'  },
+            { id: 'otros',  name: 'Sin Clasificar', isExternal: true, extId: 'OTROS'  }
         ]
     }
 ];
@@ -29,20 +29,37 @@ const WAREHOUSE_LAYOUT = [
 const allAislesData = {};
 let totalGlobalCapacity = 0;
 let localSeedData = {};
-
-// FIX: un solo listener global, registrado una sola vez
 let globalClickListenerAttached = false;
 
+// Historial en memoria (se genera al arrancar y se actualiza con cambios de Firestore)
+const activityLog = [];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function calcTotalKilos(items) {
+    if (!items || !items.length) return 0;
+    return items.reduce((s, it) => s + Math.max(0, it.kilos || 0), 0);
+}
+
+function getHeatmapClass(r) {
+    if (r < 30) return 'empty';
+    if (r <= 75) return 'medium';
+    return 'full';
+}
+
+function getHeatmapColorHex(r) {
+    if (r < 30) return '#22c55e';
+    if (r <= 75) return '#f59e0b';
+    return '#ef4444';
+}
+
+function fmtNum(n) { return n.toLocaleString('es-ES'); }
+
+// ─── INIT DATA ────────────────────────────────────────────────────────────────
 async function initMockData() {
     try {
         const resp = await fetch('./seed.json');
-        if (resp.ok) {
-            localSeedData = await resp.json();
-            console.log("Cargados datos base de seed.json");
-        }
-    } catch(e) {
-        console.log("No seed.json found", e);
-    }
+        if (resp.ok) { localSeedData = await resp.json(); }
+    } catch(e) { console.log('No seed.json', e); }
 
     WAREHOUSE_LAYOUT.forEach(col => {
         col.blocks.forEach(block => {
@@ -50,56 +67,37 @@ async function initMockData() {
             const aislesList = [];
 
             if (block.isExternal) {
-                const aisleId = block.extId;
-                const maxCapacity = 500;
-                const items = localSeedData[aisleId] ? localSeedData[aisleId].items : [];
-                const aisleObj = { id: aisleId, capacity: maxCapacity, items: items, blockId: block.id };
-                aislesList.push(aisleObj);
-                allAislesData[aisleId] = aisleObj;
-                totalGlobalCapacity += maxCapacity;
+                const id = block.extId;
+                const items = localSeedData[id]?.items || [];
+                const obj = { id, capacity: 500, items, blockId: block.id };
+                aislesList.push(obj);
+                allAislesData[id] = obj;
+                totalGlobalCapacity += 500;
             } else {
-                const isAsc = block.start <= block.end;
-                const step = isAsc ? 1 : -1;
-
-                for (let i = block.start; isAsc ? i <= block.end : i >= block.end; i += step) {
-                    // FIX: clave siempre con padStart para coincidir con seed.json
-                    const aisleId = String(i).padStart(2, '0');
-                    const maxCapacity = 24;
-                    const items = localSeedData[aisleId] ? localSeedData[aisleId].items : [];
-                    const aisleObj = { id: aisleId, capacity: maxCapacity, items: items, blockId: block.id };
-                    aislesList.push(aisleObj);
-                    allAislesData[aisleId] = aisleObj;
-                    totalGlobalCapacity += maxCapacity;
+                const asc  = block.start <= block.end;
+                const step = asc ? 1 : -1;
+                for (let i = block.start; asc ? i <= block.end : i >= block.end; i += step) {
+                    const id    = String(i).padStart(2, '0');
+                    const items = localSeedData[id]?.items || [];
+                    const obj   = { id, capacity: 24, items, blockId: block.id };
+                    aislesList.push(obj);
+                    allAislesData[id] = obj;
+                    totalGlobalCapacity += 24;
                 }
             }
             block.aisles = aislesList;
         });
     });
+
+    // Registro inicial en el historial
+    addLog('system', 'Almacén cargado desde seed.json');
 }
 
-function getHeatmapClass(occupancyRate) {
-    if (occupancyRate < 30) return 'empty';
-    if (occupancyRate <= 75) return 'medium';
-    return 'full';
-}
-
-function getHeatmapColorHex(occupancyRate) {
-    if (occupancyRate < 30) return '#22c55e';
-    if (occupancyRate <= 75) return '#f59e0b';
-    return '#ef4444';
-}
-
-// FIX: helper para calcular kilos totales ignorando valores negativos
-function calcTotalKilos(items) {
-    if (!items || items.length === 0) return 0;
-    return items.reduce((sum, it) => sum + Math.max(0, it.kilos || 0), 0);
-}
-
+// ─── RENDER MAPA ──────────────────────────────────────────────────────────────
 function renderWarehouse() {
     const gridEl = document.getElementById('warehouse-grid');
     gridEl.innerHTML = '';
-
-    let totalGlobalFilled = 0;
+    let totalFilled = 0;
 
     WAREHOUSE_LAYOUT.forEach(col => {
         const colEl = document.createElement('div');
@@ -107,17 +105,15 @@ function renderWarehouse() {
 
         col.blocks.forEach(block => {
             const blockEl = document.createElement('div');
-
             if (block.type === 'empty') {
                 blockEl.className = 'layout-block empty-block';
-                blockEl.style.minHeight = '600px';
                 colEl.appendChild(blockEl);
                 return;
             }
 
             blockEl.className = 'layout-block';
             const containerClass = block.isExternal ? 'single-col' : '';
-            let blockHtml = `
+            let html = `
                 <div class="aisle-header">
                     <span class="aisle-title">${block.name}</span>
                 </div>
@@ -125,74 +121,61 @@ function renderWarehouse() {
             `;
 
             block.aisles.forEach(aisle => {
-                const totalKilos = calcTotalKilos(aisle.items);
-                const pallets = totalKilos / 600;
-                const roundedPallets = parseFloat(pallets.toFixed(1));
+                const kg  = calcTotalKilos(aisle.items);
+                const pal = parseFloat((kg / 600).toFixed(1));
+                totalFilled += pal;
+                const occ   = (pal / aisle.capacity) * 100;
+                const heat  = getHeatmapClass(occ);
 
-                totalGlobalFilled += roundedPallets;
-
-                const occupancyRate = (roundedPallets / aisle.capacity) * 100;
-                const heatClass = getHeatmapClass(occupancyRate);
-
-                blockHtml += `
-                    <div class="rack animate-rack ${heatClass} aisle-unit"
+                html += `
+                    <div class="rack aisle-unit ${heat}"
                          data-id="${aisle.id}"
-                         title="Pasillo ${aisle.id}: ${roundedPallets} palets est.">
+                         title="Pasillo ${aisle.id} · ${pal} pal. · ${Math.round(occ)}%">
                         <span class="rack-id">P${aisle.id}</span>
-                        <span class="aisle-badge">${roundedPallets} pal.</span>
+                        <span class="aisle-badge">${pal} pal.</span>
                     </div>
                 `;
             });
 
-            blockHtml += `</div>`;
-            blockEl.innerHTML = blockHtml;
+            html += '</div>';
+            blockEl.innerHTML = html;
             colEl.appendChild(blockEl);
         });
 
         gridEl.appendChild(colEl);
     });
 
-    updateGlobalMetrics(totalGlobalFilled, totalGlobalCapacity);
-
-    // FIX: solo adjuntamos listeners de pasillo (el global ya está registrado una vez)
+    updateGlobalMetrics(totalFilled, totalGlobalCapacity);
     attachAisleListeners();
 }
 
 function updateGlobalMetrics(filled, total) {
     const rate = total === 0 ? 0 : (filled / total) * 100;
-    const globalCountEl = document.getElementById('global-ocupation');
-    const globalProgressEl = document.getElementById('global-progress');
-
-    globalCountEl.textContent = `${Math.round(rate)}%`;
-    globalProgressEl.style.width = `${Math.min(rate, 100)}%`;
-
-    const color = getHeatmapColorHex(rate);
-    globalCountEl.style.color = color;
-    globalProgressEl.style.backgroundColor = color;
+    const el  = document.getElementById('global-ocupation');
+    const bar = document.getElementById('global-progress');
+    el.textContent = `${Math.round(rate)}%`;
+    bar.style.width = `${Math.min(rate, 100)}%`;
+    const c = getHeatmapColorHex(rate);
+    el.style.color = c;
+    bar.style.backgroundColor = c;
 }
 
+// ─── LISTENERS PASILLOS ───────────────────────────────────────────────────────
 function attachAisleListeners() {
-    const aislesUnits = document.querySelectorAll('.aisle-unit');
-
-    aislesUnits.forEach(aisleEl => {
-        // FIX: clonar para eliminar listeners previos sin acumularlos
-        const clone = aisleEl.cloneNode(true);
-        aisleEl.parentNode.replaceChild(clone, aisleEl);
-
-        clone.addEventListener('click', (e) => {
+    document.querySelectorAll('.aisle-unit').forEach(el => {
+        const clone = el.cloneNode(true);
+        el.parentNode.replaceChild(clone, el);
+        clone.addEventListener('click', e => {
             e.stopPropagation();
-            document.querySelectorAll('.aisle-unit.active').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
             clone.classList.add('active');
-
-            const aisleId = clone.getAttribute('data-id');
-            const aisleData = allAislesData[aisleId];
-            if (aisleData) showInspector(aisleData);
+            const data = allAislesData[clone.getAttribute('data-id')];
+            if (data) showInspector(data);
         });
     });
 
-    // FIX: listener global registrado solo UNA vez en toda la vida del app
     if (!globalClickListenerAttached) {
-        document.addEventListener('click', (e) => {
+        document.addEventListener('click', e => {
             if (!e.target.closest('.aisle-unit') && !e.target.closest('#inspector-panel')) {
                 closeInspector();
             }
@@ -201,34 +184,33 @@ function attachAisleListeners() {
     }
 }
 
+// ─── INSPECTOR ────────────────────────────────────────────────────────────────
 function closeInspector() {
-    const inspector = document.getElementById('inspector-panel');
-    inspector.classList.remove('visible');
-    document.querySelectorAll('.aisle-unit.active').forEach(el => el.classList.remove('active'));
+    document.getElementById('inspector-panel').classList.remove('visible');
+    document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
 }
 
 function showInspector(aisleData) {
-    const inspector = document.getElementById('inspector-panel');
+    const panel    = document.getElementById('inspector-panel');
+    panel.className = 'inspector-panel wide-panel';
 
-    // FIX: limpiar clases acumuladas y reasignar limpiamente
-    inspector.className = 'inspector-panel wide-panel';
+    const kg  = calcTotalKilos(aisleData.items);
+    const pal = parseFloat((kg / 600).toFixed(1));
+    const occ = (pal / aisleData.capacity) * 100;
+    const col = getHeatmapColorHex(occ);
+    const n   = aisleData.items ? aisleData.items.length : 0;
 
-    const totalKilos = calcTotalKilos(aisleData.items);
-    const pallets = totalKilos / 600;
-    const roundedPallets = parseFloat(pallets.toFixed(1));
-    const occupancyRate = (roundedPallets / aisleData.capacity) * 100;
-    const heatColor = getHeatmapColorHex(occupancyRate);
-
-    // FIX: itemCount definida correctamente (era la variable indefinida que rompía todo)
-    const itemCount = aisleData.items ? aisleData.items.length : 0;
-
-    let content = `
+    let html = `
         <div class="inspector-header">
             <div>
-                <h3 style="font-size:22px; color:var(--accent);">Pasillo ${aisleData.id}</h3>
-                <span style="background:${heatColor}33; color:${heatColor}; display:inline-block; margin-top:6px;
-                             padding:3px 10px; border-radius:6px; font-size:13px; font-weight:600;">
-                    Ocupación: ${Math.round(occupancyRate)}% &nbsp;·&nbsp; ${roundedPallets} / ${aisleData.capacity} palets
+                <h3 style="font-size:20px; color:var(--accent); font-family:var(--font-mono);">
+                    Pasillo ${aisleData.id}
+                </h3>
+                <span style="display:inline-block; margin-top:5px; padding:3px 10px;
+                             background:${col}22; color:${col};
+                             border-radius:5px; font-size:12px; font-weight:700;
+                             font-family:var(--font-mono);">
+                    ${Math.round(occ)}% · ${pal} / ${aisleData.capacity} pal.
                 </span>
             </div>
             <button class="close-inspector" onclick="closeInspector()">
@@ -238,77 +220,67 @@ function showInspector(aisleData) {
         <div class="items-list-container">
     `;
 
-    if (itemCount > 0) {
-        // Agrupar items por código de referencia
-        const groupedItems = {};
+    if (n > 0) {
+        const grouped = {};
         aisleData.items.forEach(item => {
-            if (!groupedItems[item.id]) {
-                groupedItems[item.id] = { ...item, count: 0, totalKilos: 0, totalHojas: 0 };
-            }
-            groupedItems[item.id].count++;
-            // FIX: ignorar kilos/hojas negativos al agrupar también
-            groupedItems[item.id].totalKilos += Math.max(0, item.kilos || 0);
-            groupedItems[item.id].totalHojas += Math.max(0, item.hojas || 0);
+            if (!grouped[item.id]) grouped[item.id] = { ...item, totalKilos: 0, totalHojas: 0 };
+            grouped[item.id].totalKilos += Math.max(0, item.kilos || 0);
+            grouped[item.id].totalHojas += Math.max(0, item.hojas || 0);
         });
 
-        const groups = Object.values(groupedItems).sort((a, b) => b.totalKilos - a.totalKilos);
+        const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
 
-        content += `
+        html += `
             <table class="items-table">
-                <thead>
-                    <tr>
-                        <th>Ref./Código</th>
-                        <th>Descripción</th>
-                        <th style="text-align:right">Hojas</th>
-                        <th style="text-align:right">Kilos</th>
-                        <th style="text-align:center">Palets Est.</th>
-                    </tr>
-                </thead>
+                <thead><tr>
+                    <th>Código</th>
+                    <th>Descripción</th>
+                    <th style="text-align:right">Hojas</th>
+                    <th style="text-align:right">Kg</th>
+                    <th style="text-align:center">Pal.</th>
+                </tr></thead>
                 <tbody>
         `;
 
-        groups.forEach(group => {
-            const paletsEst = (group.totalKilos / 600).toFixed(1);
-            content += `
+        rows.forEach(g => {
+            const p = (g.totalKilos / 600).toFixed(1);
+            html += `
                 <tr>
-                    <td style="color:var(--accent); font-weight:600; font-size:11px; white-space:nowrap;">${group.id}</td>
-                    <td style="font-size:11px; max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
-                        title="${group.tipo}">${group.tipo}</td>
-                    <td style="text-align:right; font-family:monospace; font-size:12px;">${group.totalHojas.toLocaleString('es-ES')}</td>
-                    <td style="text-align:right; font-family:monospace; font-size:12px; color:#a1a1aa;">${group.totalKilos.toLocaleString('es-ES')} kg</td>
+                    <td style="color:var(--accent); font-weight:700; font-size:10px;">${g.id}</td>
+                    <td style="font-size:11px; max-width:190px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${g.tipo}">${g.tipo}</td>
+                    <td style="text-align:right; font-size:11px;">${fmtNum(g.totalHojas)}</td>
+                    <td style="text-align:right; font-size:11px; color:#9ca3af;">${fmtNum(g.totalKilos)}</td>
                     <td style="text-align:center;">
-                        <span style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:12px; font-size:11px;">${paletsEst}</span>
+                        <span style="background:rgba(255,255,255,0.08); padding:1px 7px; border-radius:10px; font-size:10px;">${p}</span>
                     </td>
                 </tr>
             `;
         });
 
-        content += `</tbody></table>`;
+        html += '</tbody></table>';
     } else {
-        content += `
+        html += `
             <div style="text-align:center; padding:40px 0; color:var(--text-muted)">
-                <i class="ri-delete-bin-3-line" style="font-size:32px; color:var(--heat-empty);"></i>
-                <p style="margin-top:12px; font-size:16px;">Pasillo Vacío</p>
-                <p style="font-size:13px; margin-top:6px;">No hay ningún artículo registrado en este pasillo.</p>
+                <i class="ri-inbox-line" style="font-size:30px; opacity:.4;"></i>
+                <p style="margin-top:10px; font-size:14px;">Pasillo vacío</p>
             </div>
         `;
     }
 
-    content += `</div>`;
-    inspector.innerHTML = content;
-    inspector.classList.add('visible');
+    html += '</div>';
+    panel.innerHTML = html;
+    panel.classList.add('visible');
 }
 
 // ─── BÚSQUEDA ─────────────────────────────────────────────────────────────────
 function setupSearch() {
-    const searchInput = document.getElementById('search-input');
-    if (!searchInput) return;
+    const inp = document.getElementById('search-input');
+    if (!inp) return;
 
-    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.trim().toLowerCase();
+    inp.addEventListener('input', e => {
+        const q = e.target.value.trim().toLowerCase();
 
-        if (!query) {
-            // Sin búsqueda: restaurar todos los pasillos a estado normal
+        if (!q) {
             document.querySelectorAll('.aisle-unit').forEach(el => {
                 el.style.opacity = '1';
                 el.style.outline = '';
@@ -316,54 +288,214 @@ function setupSearch() {
             return;
         }
 
-        // Encontrar pasillos con coincidencias en sus items
-        const matchingAisles = new Set();
+        const hits = new Set();
         Object.values(allAislesData).forEach(aisle => {
-            if (!aisle.items) return;
-            // Coincidencia también por número de pasillo
-            const aisleIdMatch = aisle.id.toLowerCase().includes(query);
-            const itemsMatch = aisle.items.some(item =>
-                (item.id && item.id.toLowerCase().includes(query)) ||
-                (item.tipo && item.tipo.toLowerCase().includes(query)) ||
-                (item.gramaje && item.gramaje.toLowerCase().includes(query)) ||
-                (item.proveedor && item.proveedor.toLowerCase().includes(query))
-            );
-            if (aisleIdMatch || itemsMatch) matchingAisles.add(aisle.id);
+            const match =
+                aisle.id.toLowerCase().includes(q) ||
+                (aisle.items || []).some(it =>
+                    (it.id       && it.id.toLowerCase().includes(q))       ||
+                    (it.tipo     && it.tipo.toLowerCase().includes(q))     ||
+                    (it.gramaje  && it.gramaje.toLowerCase().includes(q))  ||
+                    (it.proveedor && it.proveedor.toLowerCase().includes(q))
+                );
+            if (match) hits.add(aisle.id);
         });
 
-        // Resaltar coincidencias / atenuar el resto
         document.querySelectorAll('.aisle-unit').forEach(el => {
             const id = el.getAttribute('data-id');
-            if (matchingAisles.has(id)) {
+            if (hits.has(id)) {
                 el.style.opacity = '1';
                 el.style.outline = '2px solid var(--accent)';
-                el.style.outlineOffset = '2px';
+                el.style.outlineOffset = '1px';
             } else {
-                el.style.opacity = '0.2';
+                el.style.opacity = '0.15';
                 el.style.outline = '';
             }
         });
 
-        // Si solo hay un resultado, abrir su inspector automáticamente
-        if (matchingAisles.size === 1) {
-            const [singleId] = matchingAisles;
-            const el = document.querySelector(`.aisle-unit[data-id="${singleId}"]`);
-            if (el) {
-                document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
-                el.classList.add('active');
-            }
-            showInspector(allAislesData[singleId]);
+        if (hits.size === 1) {
+            const [sid] = hits;
+            const el = document.querySelector(`.aisle-unit[data-id="${sid}"]`);
+            if (el) { document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active')); el.classList.add('active'); }
+            showInspector(allAislesData[sid]);
         }
     });
 
-    // Limpiar con Escape
-    searchInput.addEventListener('keydown', (e) => {
+    inp.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
-            searchInput.value = '';
-            searchInput.dispatchEvent(new Event('input'));
+            inp.value = '';
+            inp.dispatchEvent(new Event('input'));
             closeInspector();
         }
     });
+}
+
+// ─── VISTAS ──────────────────────────────────────────────────────────────────
+function setupNavigation() {
+    document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const view = btn.getAttribute('data-view');
+
+            // Nav activo
+            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Mostrar vista
+            document.getElementById('view-map').style.display     = view === 'map'     ? 'flex' : 'none';
+            document.getElementById('view-metrics').style.display = view === 'metrics' ? 'flex' : 'none';
+            document.getElementById('view-history').style.display = view === 'history' ? 'flex' : 'none';
+
+            // Clases active para flex columns
+            ['view-map','view-metrics','view-history'].forEach(id => {
+                const el = document.getElementById(id);
+                if (id === `view-${view}`) el.classList.add('active');
+                else el.classList.remove('active');
+            });
+
+            if (view === 'metrics') renderMetrics();
+            if (view === 'history') renderHistory();
+
+            closeInspector();
+        });
+    });
+
+    // Estado inicial
+    document.getElementById('view-map').style.display     = 'flex';
+    document.getElementById('view-metrics').style.display = 'none';
+    document.getElementById('view-history').style.display = 'none';
+}
+
+// ─── MÉTRICAS ─────────────────────────────────────────────────────────────────
+function renderMetrics() {
+    const aisles = Object.values(allAislesData);
+
+    // Calcular KPIs globales
+    let totalKg = 0, totalPal = 0, totalItems = 0;
+    let aislesOcupados = 0, aislesVacios = 0, aislesSaturados = 0;
+
+    aisles.forEach(a => {
+        const kg  = calcTotalKilos(a.items);
+        const pal = kg / 600;
+        const occ = (pal / a.capacity) * 100;
+        totalKg    += kg;
+        totalPal   += pal;
+        totalItems += (a.items ? a.items.length : 0);
+        if (kg > 0) aislesOcupados++;
+        else aislesVacios++;
+        if (occ > 75) aislesSaturados++;
+    });
+
+    const kpiEl = document.getElementById('metrics-kpis');
+    kpiEl.innerHTML = `
+        <div class="metric-card">
+            <div class="metric-label">Total Kilos</div>
+            <div class="metric-value" style="color:var(--accent)">${fmtNum(Math.round(totalKg))}</div>
+            <div class="metric-sub">en almacén</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Palets Est.</div>
+            <div class="metric-value">${fmtNum(Math.round(totalPal))}</div>
+            <div class="metric-sub">total estimado</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Referencias</div>
+            <div class="metric-value">${fmtNum(totalItems)}</div>
+            <div class="metric-sub">líneas de stock</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Pasillos Ocup.</div>
+            <div class="metric-value" style="color:var(--heat-medium)">${aislesOcupados}</div>
+            <div class="metric-sub">con stock</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Vacíos</div>
+            <div class="metric-value" style="color:var(--heat-empty)">${aislesVacios}</div>
+            <div class="metric-sub">libres</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Saturados</div>
+            <div class="metric-value" style="color:var(--heat-full)">${aislesSaturados}</div>
+            <div class="metric-sub">&gt;75% ocupación</div>
+        </div>
+    `;
+
+    // Top pasillos por ocupación
+    const sorted = aisles
+        .map(a => {
+            const kg  = calcTotalKilos(a.items);
+            const pal = parseFloat((kg / 600).toFixed(1));
+            const occ = (pal / a.capacity) * 100;
+            return { id: a.id, pal, occ: Math.round(occ) };
+        })
+        .filter(a => a.pal > 0)
+        .sort((a, b) => b.occ - a.occ)
+        .slice(0, 15);
+
+    const maxPal = Math.max(...sorted.map(a => a.pal));
+    const body   = document.getElementById('metrics-top-body');
+    body.innerHTML = sorted.map(a => {
+        const color = getHeatmapColorHex(a.occ);
+        const pct   = Math.min((a.pal / maxPal) * 100, 100);
+        return `
+            <div class="top-list-row" onclick="goToAisle('${a.id}')">
+                <span class="row-id">P${a.id}</span>
+                <div class="row-bar-wrap">
+                    <div class="row-bar" style="width:${pct}%; background:${color};"></div>
+                </div>
+                <span class="row-palets">${a.pal} pal.</span>
+                <span class="row-pct" style="color:${color};">${a.occ}%</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// Navegar al pasillo desde métricas
+function goToAisle(id) {
+    document.querySelector('[data-view="map"]').click();
+    setTimeout(() => {
+        const el = document.querySelector(`.aisle-unit[data-id="${id}"]`);
+        if (el) {
+            document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
+            el.classList.add('active');
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            showInspector(allAislesData[id]);
+        }
+    }, 100);
+}
+
+// ─── HISTORIAL ────────────────────────────────────────────────────────────────
+function addLog(type, desc, aisleId) {
+    const colors = { system: '#6366f1', update: '#f59e0b', sync: '#22c55e', error: '#ef4444' };
+    activityLog.unshift({
+        type,
+        desc,
+        aisleId: aisleId || null,
+        time: new Date(),
+        color: colors[type] || '#6b7280'
+    });
+    if (activityLog.length > 50) activityLog.pop();
+}
+
+function renderHistory() {
+    const el = document.getElementById('history-list');
+    if (!activityLog.length) {
+        el.innerHTML = `<div style="padding:30px; text-align:center; color:var(--text-muted); font-size:12px; font-family:var(--font-mono);">Sin actividad registrada</div>`;
+        return;
+    }
+
+    el.innerHTML = activityLog.map(log => {
+        const t = log.time;
+        const timeStr = `${t.toLocaleDateString('es-ES')} ${t.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+        const badge = log.type === 'update' ? `<span class="history-badge" style="background:${log.color}22; color:${log.color};">${log.aisleId ? 'P' + log.aisleId : ''}</span>` : '';
+        return `
+            <div class="history-row">
+                <div class="history-dot" style="background:${log.color}; box-shadow:0 0 6px ${log.color}44;"></div>
+                <span class="history-time">${timeStr}</span>
+                <span class="history-desc">${log.desc}</span>
+                ${badge}
+            </div>
+        `;
+    }).join('');
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
@@ -371,37 +503,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initMockData();
     renderWarehouse();
     setupSearch();
+    setupNavigation();
 
     if (window.firebaseDb) {
-        const statusInd = document.querySelector('.status-indicator');
-        statusInd.textContent = 'Conectando a Firestore...';
+        const statusEl = document.querySelector('.status-indicator');
+        statusEl.textContent = 'Conectando...';
 
-        const db = window.firebaseDb;
+        const db     = window.firebaseDb;
         const colRef = window.firebaseCollection(db, 'almacen');
 
         const forceBtn = document.getElementById('force-sync-btn');
         if (forceBtn) {
             forceBtn.addEventListener('click', async () => {
-                const conf = confirm(
-                    "¿Estás seguro de forzar la sobreescritura de TODOS los pasillos en la Nube con los datos base de seed.json?\n\nEsto borrará cualquier cambio hecho a mano en Firebase."
-                );
-                if (!conf) return;
-
-                statusInd.textContent = 'Forzando Recarga...';
+                if (!confirm('¿Sobreescribir TODOS los pasillos en Firestore con seed.json?\n\nEsto borrará cambios manuales.')) return;
+                statusEl.textContent = 'Sincronizando...';
                 forceBtn.disabled = true;
                 try {
-                    const promises = [];
-                    for (let aId in allAislesData) {
-                        const docRef = window.firebaseDoc(db, 'almacen', aId);
-                        const excelItems = localSeedData[aId] ? localSeedData[aId].items : [];
-                        promises.push(window.firebaseSetDoc(docRef, { items: excelItems }));
-                    }
+                    const promises = Object.keys(allAislesData).map(id =>
+                        window.firebaseSetDoc(window.firebaseDoc(db, 'almacen', id), {
+                            items: localSeedData[id]?.items || []
+                        })
+                    );
                     await Promise.all(promises);
-                    alert("¡Sincronización completada con éxito!");
-                    statusInd.textContent = 'En vivo (Firestore)';
+                    addLog('sync', 'Sincronización forzada desde Excel completada');
+                    alert('¡Sincronización completada!');
+                    statusEl.textContent = 'En vivo (Firestore)';
                 } catch(e) {
-                    alert("Error al sincronizar: " + e.message);
-                    statusInd.textContent = 'Error Firestore';
+                    addLog('error', 'Error en sincronización: ' + e.message);
+                    alert('Error: ' + e.message);
+                    statusEl.textContent = 'Error Firestore';
                 }
                 forceBtn.disabled = false;
             });
@@ -409,47 +539,47 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         let isFirstLoad = true;
 
-        window.firebaseOnSnapshot(colRef, (snapshot) => {
-            if (snapshot.empty && isFirstLoad && window.firebaseSetDoc) {
-                console.log("Colección vacía. Sembrando con datos del Excel...");
-                statusInd.textContent = 'Volcando Excel a Base de Datos...';
-
-                const promises = [];
-                for (let aId in allAislesData) {
-                    const docRef = window.firebaseDoc(db, 'almacen', aId);
-                    promises.push(window.firebaseSetDoc(docRef, {
-                        items: allAislesData[aId].items || []
-                    }));
-                }
+        window.firebaseOnSnapshot(colRef, snapshot => {
+            if (snapshot.empty && isFirstLoad) {
+                statusEl.textContent = 'Volcando datos...';
+                const promises = Object.keys(allAislesData).map(id =>
+                    window.firebaseSetDoc(window.firebaseDoc(db, 'almacen', id), {
+                        items: allAislesData[id].items || []
+                    })
+                );
                 Promise.all(promises)
-                    .then(() => console.log("Datos sembrados con éxito."))
-                    .catch(e => console.error("Error al poblar Firestore:", e));
-
+                    .then(() => addLog('sync', 'Datos iniciales volcados a Firestore'))
+                    .catch(e => console.error(e));
             } else if (!snapshot.empty) {
+                let changes = 0;
                 snapshot.forEach(docSnap => {
-                    const aisleId = docSnap.id;
+                    const id   = docSnap.id;
                     const data = docSnap.data();
-                    if (allAislesData[aisleId]) {
-                        allAislesData[aisleId].items = Array.isArray(data.items) ? data.items : [];
+                    if (allAislesData[id]) {
+                        const prev = JSON.stringify(allAislesData[id].items);
+                        const next = Array.isArray(data.items) ? data.items : [];
+                        if (prev !== JSON.stringify(next) && !isFirstLoad) {
+                            addLog('update', `Pasillo ${id} actualizado desde Firestore`, id);
+                            changes++;
+                        }
+                        allAislesData[id].items = next;
                     }
                 });
 
-                statusInd.textContent = 'En vivo (Firestore)';
+                statusEl.textContent = 'En vivo (Firestore)';
                 renderWarehouse();
 
-                // Refrescar inspector si estaba abierto
-                const activeAisle = document.querySelector('.aisle-unit.active');
-                if (activeAisle) {
-                    const id = activeAisle.getAttribute('data-id');
+                const active = document.querySelector('.aisle-unit.active');
+                if (active) {
+                    const id = active.getAttribute('data-id');
                     if (allAislesData[id]) showInspector(allAislesData[id]);
                 }
             }
-
             isFirstLoad = false;
-
-        }, (error) => {
-            console.error("Error al escuchar Firestore:", error);
-            statusInd.textContent = 'Error Firestore (Usando Local)';
+        }, err => {
+            console.error(err);
+            addLog('error', 'Error Firestore: ' + err.message);
+            statusEl.textContent = 'Error (usando local)';
         });
     }
 });

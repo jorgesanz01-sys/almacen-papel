@@ -3,106 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador - Almacén de Papel</title>
+    <title>StoreMap — Almacén de Papel</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar glass-panel">
-            <div class="brand">
-                <i class="ri-stack-line icon-logo"></i>
-                <h1>Store<span class="highlight">Map</span></h1>
-            </div>
-            
-            <nav class="nav-menu">
-                <a href="#" class="nav-item active"><i class="ri-layout-grid-fill"></i> Mapa 3D</a>
-                <a href="#" class="nav-item"><i class="ri-bar-chart-2-fill"></i> Métricas</a>
-                <a href="#" class="nav-item"><i class="ri-history-line"></i> Historial</a>
-            </nav>
+<div class="app-container">
 
-            <div class="global-stats">
-                <h3>Ocupación Global</h3>
-                <div class="stat-card">
-                    <div class="stat-value" id="global-ocupation">82%</div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" id="global-progress" style="width: 82%"></div>
-                    </div>
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar glass-panel">
+        <div class="brand">
+            <i class="ri-stack-line icon-logo"></i>
+            <h1>Store<span class="highlight">Map</span></h1>
+        </div>
+
+        <!-- BÚSQUEDA movida a sidebar -->
+        <div class="sidebar-search">
+            <i class="ri-search-line"></i>
+            <input type="text" id="search-input" placeholder="Ref., tipo, pasillo...">
+        </div>
+
+        <nav class="nav-menu">
+            <button class="nav-item active" data-view="map">
+                <i class="ri-layout-grid-fill"></i> Mapa
+            </button>
+            <button class="nav-item" data-view="metrics">
+                <i class="ri-bar-chart-2-fill"></i> Métricas
+            </button>
+            <button class="nav-item" data-view="history">
+                <i class="ri-history-line"></i> Historial
+            </button>
+        </nav>
+
+        <div class="global-stats">
+            <h3>Ocupación Global</h3>
+            <div class="stat-card">
+                <div class="stat-value" id="global-ocupation">—</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="global-progress" style="width:0%"></div>
                 </div>
             </div>
+        </div>
 
-            <!-- Legend -->
-            <div class="legend">
-                <h3>Leyenda de Capacidad</h3>
-                <div class="legend-item"><span class="color-box empty"></span> <0% - 30% (Libre)</div>
-                <div class="legend-item"><span class="color-box medium"></span> 31% - 75% (Óptimo)</div>
-                <div class="legend-item"><span class="color-box full"></span> >75% (Saturado)</div>
+        <div class="legend">
+            <h3>Leyenda</h3>
+            <div class="legend-item"><span class="color-box empty"></span> &lt;30% Libre</div>
+            <div class="legend-item"><span class="color-box medium"></span> 30–75% Óptimo</div>
+            <div class="legend-item"><span class="color-box full"></span> &gt;75% Saturado</div>
+        </div>
+    </aside>
+
+    <!-- ── MAIN ── -->
+    <main class="main-content">
+
+        <!-- Top bar -->
+        <header class="top-bar glass-panel">
+            <div class="user-profile">
+                <button id="force-sync-btn" class="filter-btn"
+                        style="background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.3); color:#fca5a5;">
+                    <i class="ri-refresh-line"></i> Forzar Recarga Excel
+                </button>
+                <div class="status-indicator live">En vivo (Firestore)</div>
+                <div class="avatar"><i class="ri-user-smile-fill"></i></div>
             </div>
-        </aside>
+        </header>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <header class="top-bar">
-                <div class="search-box">
-                    <i class="ri-search-line"></i>
-                    <input type="text" id="search-input" placeholder="Buscar bobina por gramaje, tipo, pasillo...">
-                </div>
-                <div class="user-profile">
-                    <button id="force-sync-btn" class="filter-btn" style="margin-right: 15px; background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); color: white;">
-                        <i class="ri-refresh-line"></i> Forzar Recarga Excel
-                    </button>
-                    <div class="status-indicator live">Real-time sync</div>
-                    <div class="avatar"><i class="ri-user-smile-fill"></i></div>
-                </div>
-            </header>
-
-            <div class="warehouse-canvas glass-panel">
-                <div class="canvas-header">
-                    <h2>Plano del Almacén</h2>
-                    <div class="filters">
-                        <button class="filter-btn active">Todos</button>
-                        <button class="filter-btn">Bobinas</button>
-                        <button class="filter-btn">Palets Cortados</button>
-                    </div>
-                </div>
-                
-                <!-- Generado por JS -->
-                <div class="warehouse-grid" id="warehouse-grid">
-                    <!-- Aisles will be injected here -->
+        <!-- ══ VISTA: MAPA ══ -->
+        <div class="warehouse-canvas glass-panel" id="view-map">
+            <div class="canvas-header">
+                <h2>Plano del Almacén</h2>
+                <div class="filters">
+                    <button class="filter-btn active" data-filter="all">Todos</button>
+                    <button class="filter-btn" data-filter="bobinas">Bobinas</button>
+                    <button class="filter-btn" data-filter="cortados">Palets Cortados</button>
                 </div>
             </div>
-        </main>
-    </div>
+            <div class="warehouse-grid" id="warehouse-grid"></div>
+        </div>
 
-    <!-- Inspector Modal (hidden by default) -->
-    <div id="inspector-panel" class="inspector-panel"></div>
+        <!-- ══ VISTA: MÉTRICAS ══ -->
+        <div class="warehouse-canvas glass-panel view-panel" id="view-metrics">
+            <div class="canvas-header" style="flex-shrink:0;">
+                <h2>Métricas del Almacén</h2>
+            </div>
 
-    <!-- Firebase SDK Setup -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-        import { getFirestore, collection, doc, onSnapshot, setDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+            <!-- KPIs -->
+            <div class="metrics-grid" id="metrics-kpis"></div>
 
-        // Mantenemos la misma config, Firebase detecta Firestore automáticamente con el Project ID
-        const firebaseConfig = {
-            databaseURL: "https://almacen-papel-default-rtdb.europe-west1.firebasedatabase.app/",
-            projectId: "almacen-papel" // IMPORTANTE: Asegúrate de que este es el ID de tu proyecto en Firebase
-        };
-        
-        try {
-            const app = initializeApp(firebaseConfig);
-            window.firebaseDb = getFirestore(app);
-            window.firebaseCollection = collection;
-            window.firebaseDoc = doc;
-            window.firebaseOnSnapshot = onSnapshot;
-            window.firebaseSetDoc = setDoc;
-            window.firebaseGetDocs = getDocs;
-            console.log("Firestore initialized successfully");
-        } catch (e) {
-            console.error("Error initializing Firestore", e);
-        }
-    </script>
-    <script type="module" src="app.js"></script>
+            <!-- Top 10 más llenos -->
+            <div class="top-list" id="metrics-top" style="flex:1; overflow:hidden; display:flex; flex-direction:column;">
+                <div class="top-list-header">Top pasillos por ocupación</div>
+                <div style="flex:1; overflow-y:auto;" id="metrics-top-body"></div>
+            </div>
+        </div>
+
+        <!-- ══ VISTA: HISTORIAL ══ -->
+        <div class="warehouse-canvas glass-panel view-panel" id="view-history">
+            <div class="canvas-header" style="flex-shrink:0;">
+                <h2>Historial de Actividad</h2>
+            </div>
+            <div class="history-list" id="history-list" style="flex:1; overflow-y:auto;"></div>
+        </div>
+
+    </main>
+</div>
+
+<!-- Inspector panel -->
+<div id="inspector-panel" class="inspector-panel"></div>
+
+<!-- Firebase SDK -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { getFirestore, collection, doc, onSnapshot, setDoc, getDocs }
+        from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        databaseURL: "https://almacen-papel-default-rtdb.europe-west1.firebasedatabase.app/",
+        projectId: "almacen-papel"
+    };
+
+    try {
+        const app = initializeApp(firebaseConfig);
+        window.firebaseDb         = getFirestore(app);
+        window.firebaseCollection = collection;
+        window.firebaseDoc        = doc;
+        window.firebaseOnSnapshot = onSnapshot;
+        window.firebaseSetDoc     = setDoc;
+        window.firebaseGetDocs    = getDocs;
+        console.log("Firestore initialized");
+    } catch(e) {
+        console.error("Error initializing Firestore", e);
+    }
+</script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
