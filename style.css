@@ -498,9 +498,9 @@ body {
     z-index: 0;
 }
 
-.rack.empty::before  { background: var(--heat-empty);  opacity: 0.15; }
-.rack.medium::before { background: var(--heat-medium); opacity: 0.25; }
-.rack.full::before   { background: var(--heat-full);   opacity: 0.35; }
+.rack.empty::before  { background: var(--heat-empty);  opacity: 0.4; }
+.rack.medium::before { background: var(--heat-medium); opacity: 0.55; }
+.rack.full::before   { background: var(--heat-full);   opacity: 0.7; }
 
 .rack-id {
     font-size: 11px;
