@@ -309,7 +309,8 @@ function showInspector(aisleData) {
         grouped[it.id].totalKilos += Math.max(0, it.kilos || 0);
         grouped[it.id].totalHojas += Math.max(0, it.hojas || 0);
     });
-    const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
+    // FILTRO: Solo mostrar artículos con stock real en este pasillo
+    const rows = Object.values(grouped).filter(r => r.totalKilos > 0 || r.totalHojas > 0).sort((a, b) => b.totalKilos - a.totalKilos);
 
     const aH = cfg.h || 200; // Altura pasillo estimada 2m si no hay
     const aL = cfg.l || 0;
@@ -656,8 +657,9 @@ function showArticleCard(ref) {
         const aisle = allAislesData[aid];
         if (!aisle) return null;
         const items = (aisle.items || []).filter(it => it.id === ref.id);
-        const kg    = items.reduce((s, it) => s + Math.max(0, it.hojas || 0), 0);
-        const hojas = items.reduce((s, it) => s + Math.max(0, it.kilos || 0), 0);
+        const kg    = items.reduce((s, it) => s + Math.max(0, it.kilos || 0), 0);
+        const hojas = items.reduce((s, it) => s + Math.max(0, it.hojas || 0), 0);
+        if (kg === 0 && hojas === 0) return null; // FILTRO: Ocultar si no hay stock real
         const pal   = kg / kgPP;
         const cap   = getCapacity(aisle);
         const occ   = (calcPalets(aisle.items) / cap) * 100;
@@ -1139,7 +1141,7 @@ function showArticleDetail(refId) {
         </div>
         <div style="padding:20px; overflow-y:auto; flex:1;">
             <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px;">
-                <div class="glass-panel" style="padding:24px; background:rgba(255,255,255,0.02);">
+                <div class="glass-panel" style="padding:24px; background:white;">
                     <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">REFERENCIA</div>
                     <h1 style="margin:0 0 15px 0; font-family:Syne; font-size:32px; letter-spacing:-0.5px; color:var(--text-main);">${esc(art.id)}</h1>
                     <p style="font-size:18px; line-height:1.6; color:var(--text-main); font-weight:500;">${esc(art.tipo)}</p>
@@ -1163,10 +1165,10 @@ function showArticleDetail(refId) {
                         ${volInfo}
                     </div>
                 </div>
-                <div class="glass-panel" style="padding:24px; background:rgba(255,255,255,0.02);">
+                <div class="glass-panel" style="padding:24px; background:white;">
                     <h3 style="margin-top:0; font-family:Syne;">Ubicaciones</h3>
                     <div style="display:flex; flex-direction:column; gap:10px; margin-top:15px;">
-                        ${art.aisleList.map(a => `
+                        ${art.aisleList.filter(a => a.hojas > 0 || a.kilos > 0).map(a => `
                             <div class="dd-aisle-tag" style="padding:12px; font-size:13px; cursor:pointer;" data-aisle="${a.id}">
                                 <div style="display:flex; justify-content:space-between; align-items:center;">
                                     <span>Pasillo ${a.id}</span>
