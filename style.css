@@ -1457,22 +1457,60 @@ body {
 
 .area-card-external {
     grid-column: 1 / -1;   /* ocupa todo el ancho */
-    background: rgba(249, 115, 22, 0.06);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-direction: row;
-    padding: 12px 18px;
+    background: rgba(249, 115, 22, 0.05);
+    border-color: rgba(249, 115, 22, 0.4) !important;
+}
+.area-card-external .area-stat-val {
+    font-size: 16px;
+    color: #f97316 !important;
 }
 .area-card-external .area-card-label {
     font-size: 12px;
-    font-weight: 700;
-    margin-bottom: 0;
-    min-width: 140px;
+    font-weight: 800;
+    color: #f97316 !important;
 }
-.area-card-external .area-card-stats {
-    gap: 24px;
+
+
+/* Buscadores con X */
+.sidebar-search, .art-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
 }
-.area-card-external .area-stat-val {
-    font-size: 15px;
+.search-clear-btn {
+    position: absolute;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+.search-clear-btn:hover {
+    color: var(--text-main);
+    background: rgba(255,255,255,0.1);
+}
+
+/* Mejora tabla artículos */
+.art-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+.art-table td { vertical-align: middle; }
+.btn-view-detail {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-main);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-view-detail:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
 }

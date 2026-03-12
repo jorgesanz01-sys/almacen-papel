@@ -85,7 +85,18 @@ function extractGramaje(codigo) {
     return '-';
 }
 
-// ─── CATÁLOGO GLOBAL DE ARTÍCULOS ─────────────────────────────────────────────
+// Extraer dimensiones del papel desde la descripción (ej: "75X105")
+function parsePaperDimensions(desc) {
+    if (!desc) return null;
+    const m = desc.match(/(\d+(?:[.,]\d+)?)\s?[xX*]\s?(\d+(?:[.,]\d+)?)/);
+    if (m) {
+        return {
+            w: parseFloat(m[1].replace(',', '.')),
+            h: parseFloat(m[2].replace(',', '.'))
+        };
+    }
+    return null;
+}
 // Construye un mapa refId → { id, tipo, gramaje, proveedor, totalKilos, palets, aisles[] }
 function buildCatalog() {
     if (!_catalogDirty && _catalogCache) return _catalogCache;
@@ -139,6 +150,21 @@ async function initMockData() {
             if (merged > 0) console.log(`Cargados ${merged} kg/palet desde article_config.json`);
         }
     } catch(e) { console.log('No article_config.json', e); }
+
+    // Eventos sidebar search
+    const sInput = document.getElementById('search-input');
+    const sClear = document.getElementById('search-clear');
+    if (sInput && sClear) {
+        sInput.addEventListener('input', () => {
+            sClear.style.display = sInput.value ? 'flex' : 'none';
+        });
+        sClear.addEventListener('click', () => {
+            sInput.value = '';
+            sClear.style.display = 'none';
+            sInput.focus();
+            document.getElementById('search-dropdown').style.display = 'none';
+        });
+    }
 
     WAREHOUSE_LAYOUT.forEach(col => col.blocks.forEach(block => {
         if (block.type === 'empty') return;
@@ -254,12 +280,26 @@ function showInspector(aisleData) {
     panel.className = 'inspector-panel';
 
     const disabled = isDisabled(aisleData);
+    const cfg = getAisleCfg(aisleData.id);
     const cap = getCapacity(aisleData);
     const pal = parseFloat(calcPalets(aisleData.items).toFixed(1));
     const occ = cap > 0 ? (pal / cap) * 100 : 0;
+
+    // Calcular volumen total del pasillo (basado en items)
+    let totalVolM3 = 0;
+    (aisleData.items || []).forEach(it => {
+        const d = parsePaperDimensions(it.tipo);
+        const g = parseInt(it.gramaje) || 0;
+        if (d && g > 0) {
+            totalVolM3 += ( (d.w * d.h) / 10000 ) * (g / 1000000) * 1.2 * (it.hojas || 0);
+        }
+    });
+    const aisleVolM3 = (cfg.l && cfg.w && cfg.h) ? (cfg.l * cfg.w * cfg.h) / 1000000 : 0;
+    const volOcc = aisleVolM3 > 0 ? (totalVolM3 / aisleVolM3) * 100 : 0;
+
     const col = disabled ? '#6b7280' : getHeatmapColorHex(occ);
 
-    // Agrupar items por ref
+    // Agrupar items por ref para el listado interior
     const grouped = {};
     (aisleData.items || []).forEach(it => {
         if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0, totalHojas: 0 };
@@ -272,11 +312,18 @@ function showInspector(aisleData) {
         ? `<span class="insp-badge" style="background:#374151;color:#9ca3af;">⛔ Pasillo Anulado — no cuenta en métricas</span>`
         : `<span class="insp-badge" style="background:${col}22;color:${col};">${Math.round(occ)}% · ${pal} / ${cap} pal.</span>`;
 
+    const volBadge = (aisleVolM3 > 0)
+        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;">${Math.round(volOcc)}% Vol. (${totalVolM3.toFixed(2)} m³)</span>`
+        : (totalVolM3 > 0 ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);margin-left:5px;">${totalVolM3.toFixed(2)} m³</span>` : '');
+
     let html = `
         <div class="inspector-header">
             <div>
                 <h3 class="insp-title">Pasillo ${aisleData.id}</h3>
-                ${statusBadge}
+                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+                    ${statusBadge}
+                    ${volBadge}
+                </div>
             </div>
             <div style="display:flex;gap:6px;align-items:flex-start;">
                 <button class="insp-action-btn" data-action="edit" title="Editar configuración"><i class="ri-settings-3-line"></i></button>
@@ -380,6 +427,14 @@ function openEditModal(id) {
                     <span class="edit-hint">Por defecto: ${aisle.capacity} palets</span>
                 </div>
                 <div class="edit-section">
+                    <label class="edit-label">Dimensiones Pasillo (Largo x Ancho x Alto cm)</label>
+                    <div style="display:flex;gap:10px;">
+                        <input type="number" id="edit-dim-l" class="edit-input" placeholder="Largo" value="${cfg.l||''}" style="flex:1;">
+                        <input type="number" id="edit-dim-w" class="edit-input" placeholder="Ancho" value="${cfg.w||''}" style="flex:1;">
+                        <input type="number" id="edit-dim-h" class="edit-input" placeholder="Alto" value="${cfg.h||''}" style="flex:1;">
+                    </div>
+                </div>
+                <div class="edit-section">
                     <label class="edit-label">Artículos en el pasillo <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(edita Kg/palet de cada uno)</span></label>
                     <div class="edit-articles-list">${articlesHtml}</div>
                 </div>
@@ -400,6 +455,9 @@ function saveEditModal(id) {
     const cfg = getAisleCfg(id);
     const v   = parseInt(document.getElementById('edit-capacity').value);
     if (v > 0) cfg.capacity = v;
+    cfg.l = parseFloat(document.getElementById('edit-dim-l').value) || 0;
+    cfg.w = parseFloat(document.getElementById('edit-dim-w').value) || 0;
+    cfg.h = parseFloat(document.getElementById('edit-dim-h').value) || 0;
     saveAisleConfig();
 
     // Guardar kg/palet de cada artículo editado
@@ -844,8 +902,8 @@ function renderMetrics() {
             if (a.external) {
                 return `
                     <div class="area-external-divider"><span>Almacenes externos</span></div>
-                    <div class="area-card area-card-external" style="border-color:${a.color}66;">
-                        <div class="area-card-label" style="color:${a.color};">${a.label}</div>
+                    <div class="area-card area-card-total area-card-external" style="border-color:${a.color}88;">
+                        <div class="area-card-label" style="color:${a.color};font-size:12px;font-weight:800;">${a.label}</div>
                         <div class="area-card-stats">
                             <div><span class="area-stat-val">${fmtNum(Math.round(a.kg))}</span><span class="area-stat-lbl">kg</span></div>
                             <div><span class="area-stat-val">${fmtNum(a.pal)}</span><span class="area-stat-lbl">pal.</span></div>
@@ -887,7 +945,6 @@ function renderArticles() {
         rows = rows.filter(r =>
             r.tipo.toLowerCase().includes(q) ||
             r.id.toLowerCase().includes(q) ||
-            r.proveedor.toLowerCase().includes(q) ||
             r.gramaje.toLowerCase().includes(q)
         );
     }
@@ -906,7 +963,6 @@ function renderArticles() {
     };
 
     const container = document.getElementById('view-articles');
-    // Toolbar
     let html = `
         <div class="canvas-header" style="flex-shrink:0;">
             <h2>Artículos <span style="font-size:12px;color:var(--text-muted);font-weight:400;">(${rows.length})</span></h2>
@@ -914,11 +970,13 @@ function renderArticles() {
                 <div class="art-search-wrap">
                     <i class="ri-search-line" style="color:var(--text-muted);font-size:13px;"></i>
                     <input type="text" id="art-search-input" class="art-search-input" placeholder="Filtrar artículos..." value="${articleSearch}">
+                    <button id="art-search-clear" class="search-clear-btn" style="${articleSearch?'display:flex':'display:none'}" title="Limpiar">
+                        <i class="ri-close-line"></i>
+                    </button>
                 </div>
                 <button class="btn-secondary" style="font-size:11px;padding:5px 10px;" data-action="import" title="Importar kg/palet desde Excel">
                     <i class="ri-upload-2-line"></i> Importar Excel
                 </button>
-                <input type="file" id="art-excel-input" accept=".xls,.xlsx" style="display:none">
             </div>
         </div>
         <div style="flex:1;overflow-y:auto;min-height:0;">
@@ -926,12 +984,13 @@ function renderArticles() {
             <thead><tr>
                 ${thead('tipo','Descripción')}
                 ${thead('id','Código')}
-                ${thead('proveedor','Proveedor')}
                 ${thead('gramaje','Gramaje')}
+                ${thead('totalHojas', 'Hojas', 'right')}
                 ${thead('totalKilos','Kg totales','right')}
-                ${thead('palets','Palets est.','right')}
-                <th class="text-right">Kg/palet</th>
+                ${thead('palets','Pal. est.','right')}
+                <th class="text-right">Kg/pal</th>
                 <th class="text-center">Pasillos</th>
+                <th class="text-center">Acción</th>
             </tr></thead>
             <tbody>`;
 
@@ -944,22 +1003,18 @@ function renderArticles() {
         html += `<tr class="art-row">
             <td style="font-size:12px;line-height:1.35;">${esc(r.tipo)}</td>
             <td class="ref-code">${esc(r.id)}</td>
-            <td class="mono-sm c-muted">${esc(r.proveedor)}</td>
             <td class="mono-sm c-muted">${esc(r.gramaje)}</td>
+            <td class="text-right mono-sm">${fmtNum(r.totalHojas)}</td>
             <td class="text-right mono-sm">${fmtNum(Math.round(r.totalKilos))}</td>
-            <td class="text-right mono-sm">${r.palets.toFixed(1)}</td>
-            <td class="text-right">
-                <div class="kgpal-cell">
-                    <input type="number" min="1" max="99999"
-                           class="kgpal-input ${isCustom?'kgpal-custom':''}"
-                           data-ref="${esc(r.id)}"
-                           value="${isCustom ? kgPP : ''}"
-                           placeholder="600"
-                           onclick="event.stopPropagation()">
-                </div>
+            <td class="text-right mono-sm" style="color:var(--accent);font-weight:700;">${r.palets.toFixed(1)}</td>
+            <td class="text-right mono-sm">
+                <span style="${isCustom?'color:var(--accent);font-weight:700;':'color:#6b7280;'}">${fmtNum(kgPP)}</span>
             </td>
             <td class="text-center">
                 <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;">${aislesHtml}${moreAisles}</div>
+            </td>
+            <td class="text-center">
+                <button class="btn-view-detail" data-ref="${r.id}">Ver</button>
             </td>
         </tr>`;
     });
@@ -967,25 +1022,19 @@ function renderArticles() {
     html += `</tbody></table></div>`;
     container.innerHTML = html;
 
-    // Delegation for clicks (sort headers, aisle tags, import button)
-    if (!container._delegated) {
-        container.addEventListener('click', e => {
-            const th = e.target.closest('.art-th[data-sort]');
-            if (th) { artSort(th.dataset.sort); return; }
-            const tag = e.target.closest('.dd-aisle-tag[data-aisle]');
-            if (tag) { e.stopPropagation(); goToAisle(tag.dataset.aisle); return; }
-            const imp = e.target.closest('[data-action="import"]');
-            if (imp) { importArticleConfig(); return; }
-        });
-        container.addEventListener('change', e => {
-            const inp = e.target.closest('.kgpal-input[data-ref]');
-            if (inp) saveKgPal(inp.dataset.ref, inp.value);
-        });
-        container._delegated = true;
+    // File input para Excel
+    if (!document.getElementById('art-excel-input')) {
+        const fileInp = document.createElement('input');
+        fileInp.type = 'file';
+        fileInp.id = 'art-excel-input';
+        fileInp.accept = '.xls,.xlsx';
+        fileInp.style.display = 'none';
+        fileInp.addEventListener('change', handleExcelImport);
+        document.body.appendChild(fileInp);
     }
 
-    // Search en artículos
-    const artInp = document.getElementById('art-search-input');
+    // Eventos
+    const artInp = container.querySelector('#art-search-input');
     if (artInp) {
         artInp.addEventListener('input', e => {
             articleSearch = e.target.value;
@@ -994,10 +1043,112 @@ function renderArticles() {
         artInp.focus();
         artInp.setSelectionRange(artInp.value.length, artInp.value.length);
     }
+    container.querySelector('#art-search-clear')?.addEventListener('click', () => {
+        articleSearch = ''; renderArticles();
+    });
+    container.querySelectorAll('.art-th').forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.getAttribute('data-sort');
+            if (articleSortCol === col) articleSortDir *= -1;
+            else { articleSortCol = col; articleSortDir = -1; }
+            renderArticles();
+        });
+    });
+    container.querySelectorAll('.dd-aisle-tag').forEach(tag => {
+        tag.addEventListener('click', () => goToAisle(tag.getAttribute('data-aisle')));
+    });
+    container.querySelectorAll('.btn-view-detail').forEach(btn => {
+        btn.addEventListener('click', () => showArticleDetail(btn.getAttribute('data-ref')));
+    });
+    container.querySelector('[data-action="import"]')?.addEventListener('click', () => document.getElementById('art-excel-input').click());
+}
 
-    // File input para Excel
-    const fileInp = document.getElementById('art-excel-input');
-    if (fileInp) fileInp.addEventListener('change', handleExcelImport);
+// ─── FICHA DE ARTÍCULO ────────────────────────────────────────────────────────
+function showArticleDetail(refId) {
+    const cat = buildCatalog();
+    const art = cat[refId];
+    if (!art) return;
+
+    const dims = parsePaperDimensions(art.tipo);
+    const gram = parseInt(art.gramaje) || 0;
+    let volInfo = '';
+
+    if (dims && gram > 0) {
+        // Volumen estimado: Area * (Gramaje/1e6) * bulk * Hojas
+        // Bulk medio papel = 1.2 cm3/g = 0.0012 m3/kg
+        const areaM2 = (dims.w * dims.h) / 10000;
+        const volumeM3 = (areaM2 * (gram / 1000000) * 1.2 * art.totalHojas).toFixed(3);
+        volInfo = `
+            <div class="kpi-card" style="border-left:3px solid var(--accent);">
+                <div class="kpi-label">Volumen Estimado</div>
+                <div class="kpi-value">${volumeM3} <span style="font-size:12px;">m³</span></div>
+                <div class="kpi-trend">Basado en ${dims.w}x${dims.h} mm</div>
+            </div>`;
+    }
+
+    const container = document.getElementById('view-articles');
+    container.innerHTML = `
+        <div class="canvas-header">
+            <div style="display:flex;align-items:center;gap:15px;">
+                <button class="btn-secondary" id="detail-back" style="padding:5px 10px;"><i class="ri-arrow-left-line"></i> Volver</button>
+                <h2>Ficha de Artículo</h2>
+            </div>
+        </div>
+        <div style="padding:20px; overflow-y:auto; flex:1;">
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:20px;">
+                <div class="glass-panel" style="padding:24px; background:rgba(255,255,255,0.02);">
+                    <div style="color:var(--text-muted); font-size:11px; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">REFERENCIA</div>
+                    <h1 style="margin:0 0 15px 0; font-family:Syne; font-size:32px; letter-spacing:-0.5px; color:var(--text-main);">${esc(art.id)}</h1>
+                    <p style="font-size:18px; line-height:1.6; color:var(--text-main); font-weight:500;">${esc(art.tipo)}</p>
+                    
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px; margin-top:35px;">
+                        <div class="kpi-card">
+                            <div class="kpi-label">Stock Hojas</div>
+                            <div class="kpi-value">${fmtNum(art.totalHojas)}</div>
+                            <div class="kpi-trend">Disponibles</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Peso Total</div>
+                            <div class="kpi-value">${fmtNum(Math.round(art.totalKilos))} <span style="font-size:12px;">kg</span></div>
+                            <div class="kpi-trend">Peso real</div>
+                        </div>
+                        <div class="kpi-card">
+                            <div class="kpi-label">Palets Est.</div>
+                            <div class="kpi-value" style="color:var(--accent);">${art.palets.toFixed(1)}</div>
+                            <div class="kpi-trend">Espacio ocupado</div>
+                        </div>
+                        ${volInfo}
+                    </div>
+                </div>
+                <div class="glass-panel" style="padding:24px; background:rgba(255,255,255,0.02);">
+                    <h3 style="margin-top:0; font-family:Syne;">Ubicaciones</h3>
+                    <div style="display:flex; flex-direction:column; gap:10px; margin-top:15px;">
+                        ${art.aisles.map(a => `
+                            <div class="dd-aisle-tag" style="padding:12px; font-size:13px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;" data-aisle="${a}">
+                                <span>Pasillo ${a}</span>
+                                <i class="ri-arrow-right-s-line"></i>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div style="margin-top:35px; padding-top:20px; border-top:1px solid rgba(255,255,255,0.05);">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                            <span style="color:var(--text-muted); font-size:12px;">Proveedor</span>
+                            <span style="font-size:12px;">${esc(art.proveedor)}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="color:var(--text-muted); font-size:12px;">Gramaje</span>
+                            <span style="font-size:12px;">${esc(art.gramaje)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.querySelector('#detail-back').addEventListener('click', renderArticles);
+    container.querySelectorAll('.dd-aisle-tag').forEach(tag => {
+        tag.addEventListener('click', () => goToAisle(tag.getAttribute('data-aisle')));
+    });
 }
 
 function artSort(col) {
