@@ -1427,9 +1427,52 @@ body {
 /* Tarjeta total Almacén ZGZ */
 .area-card-total {
     background: rgba(34, 211, 238, 0.07);
-    grid-column: 1 / -1;  /* ocupa todo el ancho */
+    grid-column: 1 / -1;
 }
 .area-card-total .area-stat-val {
     font-size: 16px;
     color: #22d3ee;
+}
+
+/* Separador y tarjeta de almacén externo (Monge) */
+.area-external-divider {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+    font-size: 9px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+}
+.area-external-divider::before,
+.area-external-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(249, 115, 22, 0.25);
+}
+
+.area-card-external {
+    grid-column: 1 / -1;   /* ocupa todo el ancho */
+    background: rgba(249, 115, 22, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-direction: row;
+    padding: 12px 18px;
+}
+.area-card-external .area-card-label {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 0;
+    min-width: 140px;
+}
+.area-card-external .area-card-stats {
+    gap: 24px;
+}
+.area-card-external .area-stat-val {
+    font-size: 15px;
 }

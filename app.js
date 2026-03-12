@@ -815,7 +815,7 @@ function renderMetrics() {
         // Luego desglose
         ...AREA_DEFS,
         // Externo separado
-        { label: '📦 Monge (ext.)', extIds: ['MONGE'], color: '#f97316' },
+        { label: '📦 Monge (ext.)', extIds: ['MONGE'], color: '#f97316', external: true },
     ];
 
     const areasEl = document.getElementById('metrics-areas');
@@ -840,7 +840,20 @@ function renderMetrics() {
             return { ...area, kg, pal: Math.round(pal), refs };
         });
 
-        areasEl.innerHTML = areaStats.map(a => `
+        areasEl.innerHTML = areaStats.map(a => {
+            if (a.external) {
+                return `
+                    <div class="area-external-divider"><span>Almacenes externos</span></div>
+                    <div class="area-card area-card-external" style="border-color:${a.color}66;">
+                        <div class="area-card-label" style="color:${a.color};">${a.label}</div>
+                        <div class="area-card-stats">
+                            <div><span class="area-stat-val">${fmtNum(Math.round(a.kg))}</span><span class="area-stat-lbl">kg</span></div>
+                            <div><span class="area-stat-val">${fmtNum(a.pal)}</span><span class="area-stat-lbl">pal.</span></div>
+                            <div><span class="area-stat-val">${fmtNum(a.refs)}</span><span class="area-stat-lbl">refs</span></div>
+                        </div>
+                    </div>`;
+            }
+            return `
             <div class="area-card${a.bold ? ' area-card-total' : ''}" style="border-color:${a.color}${a.bold ? '88' : '33'};">
                 <div class="area-card-label" style="color:${a.color};${a.bold ? 'font-size:12px;font-weight:800;' : ''}">${a.label}</div>
                 <div class="area-card-stats">
@@ -848,7 +861,8 @@ function renderMetrics() {
                     <div><span class="area-stat-val">${fmtNum(a.pal)}</span><span class="area-stat-lbl">pal.</span></div>
                     <div><span class="area-stat-val">${fmtNum(a.refs)}</span><span class="area-stat-lbl">refs</span></div>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
     }
 }
 
