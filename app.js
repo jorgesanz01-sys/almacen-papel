@@ -246,7 +246,7 @@ function renderWarehouse() {
             block.aisles.forEach(aisle => {
                 const disabled = isDisabled(aisle);
                 const cap = getCapacity(aisle);
-                const pal = parseFloat(calcPalets(aisle.items).toFixed(1));
+                const pal = Math.ceil(calcPalets(aisle.items));
                 if (!disabled && !block.isExternal) { totalFilled += pal; totalCap += cap; }
                 const occ  = cap > 0 ? (pal / cap) * 100 : 0;
                 const heat = disabled ? 'disabled' : getHeatmapClass(occ);
@@ -320,7 +320,7 @@ function showInspector(aisleData) {
     const disabled = isDisabled(aisleData);
     const cfg = getAisleCfg(aisleData.id);
     const cap = getCapacity(aisleData);
-    const pal = parseFloat(calcPalets(aisleData.items).toFixed(1));
+    const pal = Math.ceil(calcPalets(aisleData.items));
     const occ = cap > 0 ? (pal / cap) * 100 : 0;
 
     const col = disabled ? '#6b7280' : getHeatmapColorHex(occ);
@@ -415,7 +415,7 @@ function showInspector(aisleData) {
             </tr></thead><tbody>`;
         rows.forEach(g => {
             const kgPP  = getKgPerPalet(g.id);
-            const palEst = (g.totalKilos / kgPP).toFixed(1);
+            const palEst = Math.ceil(g.totalKilos / kgPP);
             const isCustom = !!(articleConfig[g.id] && articleConfig[g.id].kgPerPalet > 0);
             html += `<tr>
                 <td class="ref-code">${esc(g.id)}</td>
@@ -449,7 +449,7 @@ function showInspector(aisleData) {
             "Pliegos": r.totalHojas,
             "Kilos": Math.round(r.totalKilos),
             "Kg/Palet": getKgPerPalet(r.id),
-            "Palets Est.": (r.totalKilos / getKgPerPalet(r.id)).toFixed(1)
+            "Palets Est.": Math.ceil(r.totalKilos / getKgPerPalet(r.id))
         }));
         exportToExcel(exportData, `Inventario_Pasillo_${aisleData.id}`);
     });
@@ -876,7 +876,7 @@ function renderMetrics() {
 
     // 2. Top Pasillos
     const sortedAisles = aisles.filter(a=>!isDisabled(a)).map(a => {
-        const pal = parseFloat(calcPalets(a.items).toFixed(1));
+        const pal = Math.ceil(calcPalets(a.items));
         const occ = Math.round((pal/getCapacity(a))*100);
         return { id:a.id, pal, occ };
     }).filter(a=>a.pal>0).sort((a,b)=>b.occ-a.occ).slice(0,10); // Reducir a Top 10
@@ -917,7 +917,7 @@ function renderMetrics() {
         topArticlesBody.innerHTML = articles.map(art => {
             return `<div class="top-list-row article-row">
                 <div class="row-desc" title="${esc(art.tipo)}">${esc(art.tipo)}<span>${esc(art.id)}</span></div>
-                <span class="row-palets" style="color:var(--text-main);font-weight:700;">${art.palets.toFixed(1)} pal.</span>
+                <span class="row-palets" style="color:var(--text-main);font-weight:700;">${Math.ceil(art.palets)} pal.</span>
             </div>`;
         }).join('');
     }
@@ -947,7 +947,7 @@ function renderMetrics() {
             return `<div class="top-list-row grammage-row" data-gram="${esc(g.label)}">
                 <span class="row-gram">${esc(g.label)}</span>
                 <div class="row-bar-wrap"><div class="row-bar" style="width:0;background:var(--heat-empty);"></div></div>
-                <span class="row-palets">${g.palets.toFixed(1)} pal.</span>
+                <span class="row-palets">${Math.ceil(g.palets)} pal.</span>
             </div>`;
         }).join('');
     }
@@ -1104,7 +1104,7 @@ function renderArticles() {
             <td class="mono-sm c-muted">${esc(r.gramaje)}</td>
             <td class="text-right mono-sm">${fmtNum(r.totalHojas)}</td>
             <td class="text-right mono-sm">${fmtNum(Math.round(r.totalKilos))}</td>
-            <td class="text-right mono-sm" style="color:var(--accent);font-weight:700;">${r.palets.toFixed(1)}</td>
+            <td class="text-right mono-sm" style="color:var(--accent);font-weight:700;">${Math.ceil(r.palets)}</td>
             <td class="text-right mono-sm">
                 <span style="${isCustom?'color:var(--accent);font-weight:700;':'color:#6b7280;'}">${fmtNum(kgPP)}</span>
             </td>
@@ -1167,7 +1167,7 @@ function renderArticles() {
             "Gramaje": r.gramaje,
             "Hojas": r.totalHojas,
             "Kg Totales": Math.round(r.totalKilos),
-            "Palets Est.": r.palets.toFixed(1),
+            "Palets Est.": Math.ceil(r.palets),
             "Kg/Palet": getKgPerPalet(r.id),
             "Pasillos": r.aisles.join(', ')
         }));
