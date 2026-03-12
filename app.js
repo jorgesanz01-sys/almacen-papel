@@ -68,11 +68,24 @@ function getCapacity(aisle) {
 }
 function isDisabled(aisle) { return !!(aisleConfig[aisle.id] || {}).disabled; }
 function getHeatmapClass(r) { return r < 30 ? 'empty' : r <= 75 ? 'medium' : 'full'; }
-function getHeatmapColorHex(r) { return r < 30 ? '#10b981' : r <= 75 ? '#f59e0b' : '#ef4444'; }
+function getHeatmapColorHex(r) { return r < 30 ? '#00d97e' : r <= 75 ? '#ff9e00' : '#ff003c'; }
 function fmtNum(n) { return Number(n).toLocaleString('es-ES'); }
 function esc(s) {
     if (s == null) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+
+// Exportar a Excel usando SheetJS
+function exportToExcel(data, filename) {
+    if (!window.XLSX) {
+        console.error("SheetJS no cargado");
+        return;
+    }
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Listado");
+    XLSX.writeFile(wb, `${filename}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    addLog('export', `Exportado listado: ${filename}`);
 }
 
 // ─── EXTRAER GRAMAJE DESDE CÓDIGO ─────────────────────────────────────────────
@@ -1019,6 +1032,9 @@ function renderArticles() {
                         <i class="ri-close-line"></i>
                     </button>
                 </div>
+                <button class="btn-primary" style="font-size:11px;padding:5px 10px;" id="btn-export-articles" title="Exportar listado actual a Excel">
+                    <i class="ri-download-2-line"></i> Exportar
+                </button>
                 <button class="btn-secondary" style="font-size:11px;padding:5px 10px;" data-action="import" title="Importar kg/palet desde Excel">
                     <i class="ri-upload-2-line"></i> Importar Excel
                 </button>
@@ -1106,6 +1122,20 @@ function renderArticles() {
         btn.addEventListener('click', () => showArticleDetail(btn.getAttribute('data-ref')));
     });
     container.querySelector('[data-action="import"]')?.addEventListener('click', () => document.getElementById('art-excel-input').click());
+    
+    container.querySelector('#btn-export-articles')?.addEventListener('click', () => {
+        const exportData = rows.map(r => ({
+            "Descripción": r.tipo,
+            "Código": r.id,
+            "Gramaje": r.gramaje,
+            "Hojas": r.totalHojas,
+            "Kg Totales": Math.round(r.totalKilos),
+            "Palets Est.": r.palets.toFixed(1),
+            "Kg/Palet": getKgPerPalet(r.id),
+            "Pasillos": r.aisles.join(', ')
+        }));
+        exportToExcel(exportData, "Listado_Articulos_Filtrado");
+    });
 }
 
 // ─── FICHA DE ARTÍCULO ────────────────────────────────────────────────────────
