@@ -34,8 +34,24 @@ function loadConfig() {
     try { aisleConfig   = JSON.parse(localStorage.getItem('sm_aisleConfig')   || '{}'); } catch(e) { aisleConfig   = {}; }
     try { articleConfig = JSON.parse(localStorage.getItem('sm_articleConfig') || '{}'); } catch(e) { articleConfig = {}; }
 }
-function saveAisleConfig()   { localStorage.setItem('sm_aisleConfig',   JSON.stringify(aisleConfig));   }
-function saveArticleConfig() { localStorage.setItem('sm_articleConfig', JSON.stringify(articleConfig)); }
+async function saveAisleConfig()   { 
+    localStorage.setItem('sm_aisleConfig', JSON.stringify(aisleConfig));
+    if (window.firebaseDb) {
+        try {
+            const db = window.firebaseDb;
+            await window.firebaseSetDoc(window.firebaseDoc(db, 'configuracion', 'aisles'), { data: aisleConfig });
+        } catch(e) { console.error("Error saving aisle config to cloud", e); }
+    }
+}
+async function saveArticleConfig() { 
+    localStorage.setItem('sm_articleConfig', JSON.stringify(articleConfig)); 
+    if (window.firebaseDb) {
+        try {
+            const db = window.firebaseDb;
+            await window.firebaseSetDoc(window.firebaseDoc(db, 'configuracion', 'articles'), { data: articleConfig });
+        } catch(e) { console.error("Error saving article config to cloud", e); }
+    }
+}
 function getAisleCfg(id)   { if (!aisleConfig[id])   aisleConfig[id]   = {}; return aisleConfig[id]; }
 function getArticleCfg(id) { if (!articleConfig[id]) articleConfig[id] = {}; return articleConfig[id]; }
 
@@ -1598,6 +1614,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         const statusEl = document.getElementById('sidebar-status');
         statusEl.textContent = 'Conectando...';
         const db = window.firebaseDb, colRef = window.firebaseCollection(db, 'almacen');
+        const configColRef = window.firebaseCollection(db, 'configuracion');
+
+        // Listener para Configuraciones (Sincronización Cloud)
+        window.firebaseOnSnapshot(configColRef, snapshot => {
+            snapshot.forEach(doc => {
+                const data = doc.data().data || {};
+                if (doc.id === 'aisles') {
+                    aisleConfig = data;
+                    localStorage.setItem('sm_aisleConfig', JSON.stringify(aisleConfig));
+                }
+                if (doc.id === 'articles') {
+                    articleConfig = data;
+                    localStorage.setItem('sm_articleConfig', JSON.stringify(articleConfig));
+                }
+            });
+            renderWarehouse();
+            if (document.getElementById('view-articles').style.display !== 'none') renderArticles();
+            if (document.getElementById('view-config').style.display !== 'none') renderConfigView();
+        });
 
         let isFirstLoad = true;
         window.firebaseOnSnapshot(colRef, snapshot => {
