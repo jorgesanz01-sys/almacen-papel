@@ -1206,15 +1206,14 @@ function showArticleDetail(refId) {
     let volInfo = '';
 
     if (dims && gram > 0) {
-        // Volumen estimado: Area * (Gramaje/1e6) * bulk * Hojas
-        // Bulk medio papel = 1.2 cm3/g = 0.0012 m3/kg
+        const bulk = getBulkFactor(art.id);
         const areaM2 = (dims.w * dims.h) / 10000;
-        const volumeM3 = (areaM2 * (gram / 1000000) * 1.2 * art.totalHojas).toFixed(3);
+        const volumeM3 = (areaM2 * (gram / 1000000) * bulk * art.totalHojas).toFixed(3);
         volInfo = `
             <div class="kpi-card" style="border-left:3px solid var(--accent);">
                 <div class="kpi-label">Volumen Estimado</div>
                 <div class="kpi-value">${volumeM3} <span style="font-size:12px;">m³</span></div>
-                <div class="kpi-trend">Basado en ${dims.w}x${dims.h} mm</div>
+                <div class="kpi-trend">Con Bulk ${bulk}</div>
             </div>`;
     }
 
@@ -1246,10 +1245,25 @@ function showArticleDetail(refId) {
                         </div>
                         <div class="kpi-card">
                             <div class="kpi-label">Palets Est.</div>
-                            <div class="kpi-value" style="color:var(--accent);">${art.palets.toFixed(1)}</div>
+                            <div class="kpi-value" style="color:var(--accent);">${Math.ceil(art.palets)}</div>
                             <div class="kpi-trend">Espacio ocupado</div>
                         </div>
                         ${volInfo}
+                    </div>
+
+                    <div style="margin-top:40px; padding-top:20px; border-top:1px solid var(--glass-border);">
+                        <h4 style="margin:0 0 15px 0; font-family:Syne; font-size:14px;">Configuración de Volumetría</h4>
+                        <div style="display:flex; gap:20px; align-items:flex-end;">
+                            <div style="flex:1;">
+                                <label style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:5px;">Kg por Palet</label>
+                                <input type="number" id="edit-kgpal" class="art-search-input" style="width:100%;" value="${getKgPerPalet(art.id)}">
+                            </div>
+                            <div style="flex:1;">
+                                <label style="display:block; font-size:11px; color:var(--text-muted); margin-bottom:5px;">Factor Bulk (abultamiento)</label>
+                                <input type="number" step="0.1" id="edit-bulk" class="art-search-input" style="width:100%;" value="${getBulkFactor(art.id)}">
+                            </div>
+                            <button class="btn-primary" id="btn-save-art-cfg" style="padding:10px 20px;">Guardar Cambios</button>
+                        </div>
                     </div>
                 </div>
                 <div class="glass-panel" style="padding:24px; background:white;">
@@ -1283,6 +1297,18 @@ function showArticleDetail(refId) {
     container.querySelector('#detail-back').addEventListener('click', renderArticles);
     container.querySelectorAll('.dd-aisle-tag').forEach(tag => {
         tag.addEventListener('click', () => goToAisle(tag.getAttribute('data-aisle')));
+    });
+
+    container.querySelector('#btn-save-art-cfg').addEventListener('click', async () => {
+        const kgVal   = parseFloat(container.querySelector('#edit-kgpal').value);
+        const bulkVal = parseFloat(container.querySelector('#edit-bulk').value);
+
+        if (kgVal > 0) getArticleCfg(refId).kgPerPalet = kgVal;
+        if (bulkVal > 0) getArticleCfg(refId).bulk = bulkVal;
+
+        await saveArticleConfig();
+        addLog('edit', `Conf. actualizada: ${refId} (Kg/pal: ${kgVal}, Bulk: ${bulkVal})`);
+        showArticleDetail(refId); // Recargar vista
     });
 }
 
