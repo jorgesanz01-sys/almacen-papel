@@ -776,13 +776,14 @@ function setupNavigation() {
             const view = btn.getAttribute('data-view');
             document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            ['map','metrics','history','articles'].forEach(v => {
+            ['map','metrics','history','articles','config'].forEach(v => {
                 const el = document.getElementById(`view-${v}`);
                 if (el) el.style.display = v === view ? 'flex' : 'none';
             });
             if (view === 'metrics')  renderMetrics();
             if (view === 'history')  renderHistory();
             if (view === 'articles') renderArticles();
+            if (view === 'config')   renderConfigView();
             closeInspector();
         });
     });
@@ -790,6 +791,7 @@ function setupNavigation() {
     document.getElementById('view-metrics').style.display  = 'none';
     document.getElementById('view-history').style.display  = 'none';
     document.getElementById('view-articles').style.display = 'none';
+    document.getElementById('view-config').style.display   = 'none';
 }
 
 // ─── VISTA MÉTRICAS ───────────────────────────────────────────────────────────
@@ -1437,6 +1439,94 @@ function renderHistory() {
         const badge = log.aisleId ? `<span class="history-badge" style="background:${log.color}22;color:${log.color};">P${log.aisleId}</span>` : '';
         return `<div class="history-row"><div class="history-dot" style="background:${log.color};"></div><span class="history-time">${ts}</span><span class="history-desc">${log.desc}</span>${badge}</div>`;
     }).join('');
+}
+
+// ─── CONFIGURACIÓN DE PASILLOS ──────────────────────────────────────────────
+function renderConfigView() {
+    const container = document.getElementById('config-content');
+    if (!container) return;
+
+    const aisles = Object.values(allAislesData).sort((a,b) => {
+        // Ordenar numéricamente si es posible, sino alfabéticamente
+        const na = parseInt(a.id), nb = parseInt(b.id);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return a.id.localeCompare(b.id);
+    });
+
+    let html = `
+    <table class="items-table art-table">
+        <thead>
+            <tr>
+                <th>Pasillo</th>
+                <th class="text-center">Estado</th>
+                <th class="text-right">Capacidad (pal)</th>
+                <th class="text-right">Largo (cm)</th>
+                <th class="text-right">Ancho (cm)</th>
+                <th class="text-right">Alto (cm)</th>
+                <th class="text-center">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>`;
+
+    aisles.forEach(a => {
+        const cfg = getAisleCfg(a.id);
+        const disabled = !!cfg.disabled;
+        const cap = cfg.capacity || a.capacity;
+        
+        html += `
+        <tr data-aisle="${a.id}" style="${disabled ? 'opacity:0.6;background:rgba(0,0,0,0.1);' : ''}">
+            <td><strong style="color:var(--accent);">P${a.id}</strong></td>
+            <td class="text-center">
+                <span class="insp-badge" style="background:${disabled ? '#374151' : '#22c55e22'};color:${disabled ? '#9ca3af' : '#22c55e'};">
+                    ${disabled ? 'Deshabilitado' : 'Activo'}
+                </span>
+            </td>
+            <td class="text-right">
+                <input type="number" class="edit-input-sm cfg-cap" value="${cap}" min="1" max="999" data-id="${a.id}">
+            </td>
+            <td class="text-right">
+                <input type="number" class="edit-input-sm cfg-l" value="${cfg.l || ''}" placeholder="0" data-id="${a.id}">
+            </td>
+            <td class="text-right">
+                <input type="number" class="edit-input-sm cfg-w" value="${cfg.w || ''}" placeholder="0" data-id="${a.id}">
+            </td>
+            <td class="text-right">
+                <input type="number" class="edit-input-sm cfg-h" value="${cfg.h || ''}" placeholder="0" data-id="${a.id}">
+            </td>
+            <td class="text-center">
+                <button class="insp-action-btn ${disabled ? 'btn-enable' : 'btn-disable'}" onclick="toggleAisleDisabledFromConfig('${a.id}')" title="${disabled ? 'Habilitar' : 'Deshabilitar'}">
+                    <i class="ri-${disabled ? 'checkbox-circle-line' : 'forbid-line'}"></i>
+                </button>
+            </td>
+        </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+
+    // Listeners para cambios
+    container.querySelectorAll('input').forEach(inp => {
+        inp.addEventListener('change', () => {
+            const id = inp.dataset.id;
+            const cfg = getAisleCfg(id);
+            if (inp.classList.contains('cfg-cap')) cfg.capacity = parseInt(inp.value) || 0;
+            if (inp.classList.contains('cfg-l'))   cfg.l = parseFloat(inp.value) || 0;
+            if (inp.classList.contains('cfg-w'))   cfg.w = parseFloat(inp.value) || 0;
+            if (inp.classList.contains('cfg-h'))   cfg.h = parseFloat(inp.value) || 0;
+            saveAisleConfig();
+            renderWarehouse();
+            addLog('edit', `P${id} — actualizado desde Configuración`, id);
+        });
+    });
+}
+
+function toggleAisleDisabledFromConfig(id) {
+    const cfg = getAisleCfg(id);
+    cfg.disabled = !cfg.disabled;
+    saveAisleConfig();
+    addLog(cfg.disabled ? 'disable' : 'enable', `Pasillo ${cfg.disabled ? 'anulado' : 'reactivado'} desde Configuración: P${id}`, id);
+    renderWarehouse();
+    renderConfigView();
 }
 
 // ─── FIRESTORE ────────────────────────────────────────────────────────────────

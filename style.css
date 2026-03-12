@@ -1514,3 +1514,42 @@ body {
     border-color: var(--accent);
     color: white;
 }
+
+/* ─── VISTA CONFIGURACIÓN ───────────────────────────────────────────────────── */
+.edit-input-sm {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 6px;
+    width: 70px;
+    transition: all 0.2s;
+    text-align: right;
+}
+
+.edit-input-sm:focus {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.05);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.edit-input-sm::placeholder {
+    color: rgba(255, 255, 255, 0.15);
+}
+
+#view-config .items-table {
+    margin-top: 15px;
+    border-collapse: separate;
+    border-spacing: 0 2px;
+}
+
+#view-config .items-table tr {
+    transition: background 0.2s;
+}
+
+#view-config .items-table tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
