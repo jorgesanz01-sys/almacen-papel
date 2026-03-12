@@ -209,7 +209,7 @@ async function initMockData() {
         const list = [];
         if (block.isExternal) {
             const id  = block.extId;
-            const obj = { id, capacity: 500, items: localSeedData[id]?.items || [], blockId: block.id };
+            const obj = { id, capacity: 500, items: localSeedData[id]?.items || [], blockId: block.id, isExternal: true };
             list.push(obj); allAislesData[id] = obj; totalGlobalCapacity += 500;
         } else {
             const asc = block.start <= block.end, step = asc ? 1 : -1;
@@ -247,7 +247,7 @@ function renderWarehouse() {
                 const disabled = isDisabled(aisle);
                 const cap = getCapacity(aisle);
                 const pal = parseFloat(calcPalets(aisle.items).toFixed(1));
-                if (!disabled) { totalFilled += pal; totalCap += cap; }
+                if (!disabled && !block.isExternal) { totalFilled += pal; totalCap += cap; }
                 const occ  = cap > 0 ? (pal / cap) * 100 : 0;
                 const heat = disabled ? 'disabled' : getHeatmapClass(occ);
                 html += `
@@ -852,6 +852,8 @@ function renderMetrics() {
     // Calcular KPIs Globales
     aisles.forEach(a => {
         if (isDisabled(a)) { anulados++; return; }
+        if (a.isExternal) return; // Excluir Monge, Taller, Digital del cálculo global
+        
         const kg  = calcTotalKilos(a.items);
         const pal = calcPalets(a.items);
         const occ = (pal / getCapacity(a)) * 100;
