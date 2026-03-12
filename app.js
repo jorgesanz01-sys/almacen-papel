@@ -68,7 +68,7 @@ function getCapacity(aisle) {
 }
 function isDisabled(aisle) { return !!(aisleConfig[aisle.id] || {}).disabled; }
 function getHeatmapClass(r) { return r < 30 ? 'empty' : r <= 75 ? 'medium' : 'full'; }
-function getHeatmapColorHex(r) { return r < 30 ? '#10b981' : r <= 75 ? '#f59e0b' : '#f43f5e'; }
+function getHeatmapColorHex(r) { return r < 30 ? '#10b981' : r <= 75 ? '#f59e0b' : '#e11d48'; }
 function fmtNum(n) { return Number(n).toLocaleString('es-ES'); }
 function esc(s) {
     if (s == null) return '';
@@ -418,7 +418,7 @@ function showInspector(aisleData) {
     }
 
     html += `</div>
-        <div class="inspector-footer" style="padding:15px 20px; border-top:1px solid var(--glass-border); display:flex; justify-content:flex-end; background:var(--bg-block);">
+        <div class="inspector-footer" style="padding:15px 20px; border-top:1px solid var(--glass-border); display:flex; justify-content:flex-end; background:rgba(0,0,0,0.03);">
             <button class="btn-primary" id="btn-export-aisle" style="gap:8px;">
                 <i class="ri-file-excel-2-line"></i> Exportar Listado
             </button>
