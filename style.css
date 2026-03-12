@@ -11,9 +11,9 @@
     --accent-dim: rgba(55, 48, 163, 0.1);
     --accent-glow: rgba(55, 48, 163, 0.25);
 
-    --heat-empty: #00d97e;
-    --heat-medium: #ff9e00;
-    --heat-full: #ff003c;
+    --heat-empty: #10b981;
+    --heat-medium: #f59e0b;
+    --heat-full: #e11d48;
 
     --radius: 12px;
     --transition: all 0.2s ease;
@@ -499,9 +499,9 @@ body {
     z-index: 0;
 }
 
-.rack.empty::before  { background: var(--heat-empty);  opacity: 0.8; }
-.rack.medium::before { background: var(--heat-medium); opacity: 0.9; }
-.rack.full::before   { background: var(--heat-full);   opacity: 1.0; }
+.rack.empty::before  { background: var(--heat-empty);  opacity: 0.55; }
+.rack.medium::before { background: var(--heat-medium); opacity: 0.75; }
+.rack.full::before   { background: var(--heat-full);   opacity: 0.9; }
 
 .rack-id {
     font-size: 12px;

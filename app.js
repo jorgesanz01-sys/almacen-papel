@@ -68,7 +68,7 @@ function getCapacity(aisle) {
 }
 function isDisabled(aisle) { return !!(aisleConfig[aisle.id] || {}).disabled; }
 function getHeatmapClass(r) { return r < 30 ? 'empty' : r <= 75 ? 'medium' : 'full'; }
-function getHeatmapColorHex(r) { return r < 30 ? '#00d97e' : r <= 75 ? '#ff9e00' : '#ff003c'; }
+function getHeatmapColorHex(r) { return r < 30 ? '#10b981' : r <= 75 ? '#f59e0b' : '#e11d48'; }
 function fmtNum(n) { return Number(n).toLocaleString('es-ES'); }
 function esc(s) {
     if (s == null) return '';
