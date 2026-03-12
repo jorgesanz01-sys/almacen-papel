@@ -107,19 +107,28 @@ function buildCatalog() {
             let gramaje = it.gramaje || '';
             if (!gramaje || gramaje === '-') gramaje = extractGramaje(it.id || '');
 
-            if (!cat[it.id]) cat[it.id] = {
-                id: it.id, tipo: it.tipo || '', gramaje: gramaje,
-                proveedor: it.proveedor || '', totalKilos: 0, totalHojas: 0,
-                palets: 0, aisles: new Set()
-            };
+            if (!cat[it.id]) {
+                cat[it.id] = {
+                    id: it.id, tipo: it.tipo || '', gramaje: gramaje,
+                    proveedor: it.proveedor || '', totalKilos: 0, totalHojas: 0,
+                    palets: 0, aisles: {} // aisleId -> { hojas, kilos }
+                };
+            }
             cat[it.id].totalKilos += Math.max(0, it.kilos || 0);
             cat[it.id].totalHojas += Math.max(0, it.hojas || 0);
             cat[it.id].palets     += Math.max(0, it.kilos || 0) / getKgPerPalet(it.id);
-            cat[it.id].aisles.add(aisle.id);
+            
+            if (!cat[it.id].aisles[aisle.id]) cat[it.id].aisles[aisle.id] = { hojas: 0, kilos: 0 };
+            cat[it.id].aisles[aisle.id].hojas += Math.max(0, it.hojas || 0);
+            cat[it.id].aisles[aisle.id].kilos += Math.max(0, it.kilos || 0);
         });
     });
-    // Convertir sets a arrays
-    Object.values(cat).forEach(a => { a.aisles = [...a.aisles].sort(); });
+    // Convertir map de aisles a array ordenado
+    Object.values(cat).forEach(a => {
+        a.aisleList = Object.entries(a.aisles).map(([id, info]) => ({ id, ...info })).sort((x, y) => x.id.localeCompare(y.id));
+        // Para compatibilidad con otros sitios que usen .aisles como array
+        a.aisles = a.aisleList.map(x => x.id);
+    });
     _catalogCache = cat;
     _catalogDirty = false;
     return cat;
@@ -285,21 +294,15 @@ function showInspector(aisleData) {
     const pal = parseFloat(calcPalets(aisleData.items).toFixed(1));
     const occ = cap > 0 ? (pal / cap) * 100 : 0;
 
-    // Calcular volumen total del pasillo (basado en items)
-    let totalVolM3 = 0;
-    (aisleData.items || []).forEach(it => {
-        const d = parsePaperDimensions(it.tipo);
-        const g = parseInt(it.gramaje) || 0;
-        if (d && g > 0) {
-            totalVolM3 += ( (d.w * d.h) / 10000 ) * (g / 1000000) * 1.2 * (it.hojas || 0);
-        }
-    });
-    const aisleVolM3 = (cfg.l && cfg.w && cfg.h) ? (cfg.l * cfg.w * cfg.h) / 1000000 : 0;
-    const volOcc = aisleVolM3 > 0 ? (totalVolM3 / aisleVolM3) * 100 : 0;
-
     const col = disabled ? '#6b7280' : getHeatmapColorHex(occ);
 
-    // Agrupar items por ref para el listado interior
+    // MODELO VOLUMÉTRICO: BASES EN SUELO Y ALTURAS
+    // 1. Calcular bases necesarias (pilas) basado en altura acumulada artículos + madera (15cm)
+    // 2. Comprobar contra dimensiones configuradas del pasillo
+    let basesNeeded = 0;
+    let totalVolM3 = 0;
+    
+    // Agrupar items por ref para el listado interior y cálculo volumétrico
     const grouped = {};
     (aisleData.items || []).forEach(it => {
         if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0, totalHojas: 0 };
@@ -308,12 +311,52 @@ function showInspector(aisleData) {
     });
     const rows = Object.values(grouped).sort((a, b) => b.totalKilos - a.totalKilos);
 
+    const aH = cfg.h || 200; // Altura pasillo estimada 2m si no hay
+    const aL = cfg.l || 0;
+    const aW = cfg.w || 0;
+    
+    rows.forEach(r => {
+        const d = parsePaperDimensions(r.tipo);
+        const g = parseInt(r.gramaje) || 0;
+        const numPal = Math.ceil(r.totalKilos / getKgPerPalet(r.id));
+        
+        if (d && g > 0) {
+            // Volume = Area * (Gram/1e6) * bulk * Hojas
+            const vol = ( (d.w * d.h) / 10000 ) * (g / 1000000) * 1.2 * r.totalHojas;
+            totalVolM3 += vol;
+            
+            // Altura (cm): (Hojas * gram / 10000 * 1.2) + (numPalets * 15cm madera)
+            const paperH = r.totalHojas * (g / 10000) * 1.2;
+            const stackH = paperH + (numPal * 15);
+            
+            // Bases necesarias para esta referencia (stacking vertical limitado por aH)
+            basesNeeded += Math.ceil(stackH / aH);
+        } else {
+            // Sin dimensiones: 1 palet = 1 base por simplificación
+            basesNeeded += numPal;
+        }
+    });
+
+    const aisleVolM3 = (aL && aW && aH) ? (aL * aW * aH) / 1000000 : 0;
+    
+    // Capacidad en bases (suelo): El palet más grande de la fila marca el espacio
+    let maxPalDim = 100; // mínimo 1m
+    rows.forEach(r => {
+        const d = parsePaperDimensions(r.tipo);
+        if (d) maxPalDim = Math.max(maxPalDim, d.w, d.h);
+    });
+    // Añadir margen de 10cm al palet
+    const palLength = maxPalDim + 10; 
+    
+    const maxBases  = aL > 0 ? Math.floor(aL / palLength) : 0;
+    const volOcc    = maxBases > 0 ? (basesNeeded / maxBases) * 100 : (aisleVolM3 > 0 ? (totalVolM3 / aisleVolM3) * 100 : 0);
+
     const statusBadge = disabled
         ? `<span class="insp-badge" style="background:#374151;color:#9ca3af;">⛔ Pasillo Anulado — no cuenta en métricas</span>`
         : `<span class="insp-badge" style="background:${col}22;color:${col};">${Math.round(occ)}% · ${pal} / ${cap} pal.</span>`;
 
-    const volBadge = (aisleVolM3 > 0)
-        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;">${Math.round(volOcc)}% Vol. (${totalVolM3.toFixed(2)} m³)</span>`
+    const volBadge = (maxBases > 0)
+        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;">${Math.round(volOcc)}% Suelo (${basesNeeded}/${maxBases} bases)</span>`
         : (totalVolM3 > 0 ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);margin-left:5px;">${totalVolM3.toFixed(2)} m³</span>` : '');
 
     let html = `
@@ -1123,10 +1166,13 @@ function showArticleDetail(refId) {
                 <div class="glass-panel" style="padding:24px; background:rgba(255,255,255,0.02);">
                     <h3 style="margin-top:0; font-family:Syne;">Ubicaciones</h3>
                     <div style="display:flex; flex-direction:column; gap:10px; margin-top:15px;">
-                        ${art.aisles.map(a => `
-                            <div class="dd-aisle-tag" style="padding:12px; font-size:13px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;" data-aisle="${a}">
-                                <span>Pasillo ${a}</span>
-                                <i class="ri-arrow-right-s-line"></i>
+                        ${art.aisleList.map(a => `
+                            <div class="dd-aisle-tag" style="padding:12px; font-size:13px; cursor:pointer;" data-aisle="${a.id}">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span>Pasillo ${a.id}</span>
+                                    <span style="font-weight:700; color:var(--accent);">${fmtNum(a.hojas)} <span style="font-size:10px; font-weight:400; color:var(--text-muted);">hojas</span></span>
+                                </div>
+                                <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${fmtNum(Math.round(a.kilos))} kg</div>
                             </div>
                         `).join('')}
                     </div>
