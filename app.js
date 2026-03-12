@@ -231,14 +231,14 @@ async function initMockData() {
 
 // ─── RENDER MAPA ─────────────────────────────────────────────────────────────
 function renderWarehouse() {
-    const gridEl = document.getElementById('warehouse-grid');
-    gridEl.innerHTML = '';
-    let totalFilled = 0, totalCap = 0;
+    let globalPal = 0, globalCap = 0;
+    let globalLinUsed = 0, globalLinMax = 0;
+    let globalCubUsed = 0, globalCubMax = 0;
 
     WAREHOUSE_LAYOUT.forEach(col => {
         const colEl = document.createElement('div');
         colEl.className = 'layout-column';
-        colEl.id = col.id; // allows CSS #col-left / #col-center targeting
+        colEl.id = col.id;
 
         col.blocks.forEach(block => {
             const blockEl = document.createElement('div');
@@ -250,17 +250,22 @@ function renderWarehouse() {
 
             block.aisles.forEach(aisle => {
                 const disabled = isDisabled(aisle);
-                const cap = getCapacity(aisle);
-                const pal = Math.ceil(calcPalets(aisle.items));
-                if (!disabled && !block.isExternal) { totalFilled += pal; totalCap += cap; }
-                const occ  = cap > 0 ? (pal / cap) * 100 : 0;
+                const v = getAisleVolumetry(aisle);
+                
+                if (!disabled && !block.isExternal) {
+                    globalPal += v.pal; globalCap += v.cap;
+                    globalLinUsed += v.linearUsed; globalLinMax += v.linearMax;
+                    globalCubUsed += v.cubicUsed; globalCubMax += v.cubicMax;
+                }
+
+                const occ  = v.cap > 0 ? (v.pal / v.cap) * 100 : 0;
                 const heat = disabled ? 'disabled' : getHeatmapClass(occ);
                 html += `
                     <div class="rack aisle-unit ${heat}" data-id="${aisle.id}"
-                         title="${disabled ? '⛔ Anulado' : `P${aisle.id} · ${pal} pal. · ${Math.round(occ)}% · ${aisle.items.length} refs`}">
+                         title="${disabled ? '⛔ Anulado' : `P${aisle.id} · ${v.pal} pal. · ${Math.round(occ)}% · ${aisle.items.length} refs`}">
                         ${disabled ? '<i class="ri-forbid-line" style="font-size:10px;color:#4b5563;z-index:1;"></i>' : ''}
                         <span class="rack-id" style="${disabled?'color:#4b5563;':''}">${aisle.id}</span>
-                        <span class="aisle-badge" style="${disabled?'color:#374151;':''}">${disabled ? 'anulado' : pal+' pal.'}</span>
+                        <span class="aisle-badge" style="${disabled?'color:#374151;':''}">${disabled ? 'anulado' : v.pal+' pal.'}</span>
                         ${!disabled ? `<span class="aisle-refs">${aisle.items.length} ref${aisle.items.length !== 1 ? 's' : ''}</span>` : ''}
                     </div>`;
             });
@@ -272,19 +277,39 @@ function renderWarehouse() {
         gridEl.appendChild(colEl);
     });
 
-    updateGlobalMetrics(totalFilled, totalCap);
+    updateGlobalMetrics({
+        pal: { used: globalPal, max: globalCap },
+        lin: { used: globalLinUsed, max: globalLinMax },
+        cub: { used: globalCubUsed, max: globalCubMax }
+    });
     attachAisleListeners();
 }
 
-function updateGlobalMetrics(filled, total) {
-    const rate = total === 0 ? 0 : (filled / total) * 100;
+function updateGlobalMetrics(stats) {
+    const pRate = stats.pal.max === 0 ? 0 : (stats.pal.used / stats.pal.max) * 100;
+    const lRate = stats.lin.max === 0 ? 0 : (stats.lin.used / stats.lin.max) * 100;
+    const cRate = stats.cub.max === 0 ? 0 : (stats.cub.used / stats.cub.max) * 100;
+
+    // EL MÁS RESTRICTIVO: Cuello de botella
+    const rate = Math.max(pRate, lRate, cRate);
+    
     const el   = document.getElementById('global-ocupation');
     const bar  = document.getElementById('global-progress');
+    const wrap = document.querySelector('.progress-bar-container');
     if (!el || !bar) return;
+
     el.textContent = `${Math.round(rate)}%`;
     bar.style.width = `${Math.min(rate, 100)}%`;
     const c = getHeatmapColorHex(rate);
     el.style.color = c; bar.style.backgroundColor = c;
+    
+    // Tooltip informativo
+    if (wrap) {
+        wrap.title = `Cuello de botella: ${Math.round(rate)}%\n` +
+                     `· Capacidad Palets: ${Math.round(pRate)}%\n` +
+                     `· Ocupación Suelo: ${Math.round(lRate)}%\n` +
+                     `· Volumen Cúbico: ${Math.round(cRate)}%`;
+    }
 }
 
 // ─── LISTENERS ────────────────────────────────────────────────────────────────
@@ -312,48 +337,28 @@ function attachAisleListeners() {
     }
 }
 
-// ─── INSPECTOR ────────────────────────────────────────────────────────────────
-function closeInspector() {
-    document.getElementById('inspector-panel').classList.remove('visible');
-    document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
-}
-
-function showInspector(aisleData) {
-    const panel    = document.getElementById('inspector-panel');
-    panel.className = 'inspector-panel';
-
-    const disabled = isDisabled(aisleData);
+// ─── CALCULOS VOLUMÉTRICOS ─────────────────────────────────────────────────────
+function getAisleVolumetry(aisleData) {
     const cfg = getAisleCfg(aisleData.id);
     const cap = getCapacity(aisleData);
     const pal = Math.ceil(calcPalets(aisleData.items));
-    const occ = cap > 0 ? (pal / cap) * 100 : 0;
-
-    const col = disabled ? '#6b7280' : getHeatmapColorHex(occ);
-
-    // MODELO VOLUMÉTRICO: BASES EN SUELO Y ALTURAS
-    // 1. Calcular bases necesarias (pilas) basado en altura acumulada artículos + madera (15cm)
-    // 2. Comprobar contra dimensiones configuradas del pasillo
-    let basesNeeded = 0;
-    let totalVolM3 = 0;
     
-    // Agrupar items por ref para el listado interior y cálculo volumétrico
+    // Agrupar items por ref para cálculo volumétrico
     const grouped = {};
     (aisleData.items || []).forEach(it => {
         if (!grouped[it.id]) grouped[it.id] = { ...it, totalKilos: 0, totalHojas: 0 };
         grouped[it.id].totalKilos += Math.max(0, it.kilos || 0);
         grouped[it.id].totalHojas += Math.max(0, it.hojas || 0);
     });
-    // FILTRO: Solo mostrar artículos con stock real en este pasillo
-    const rows = Object.values(grouped).filter(r => r.totalKilos > 0 || r.totalHojas > 0).sort((a, b) => b.totalKilos - a.totalKilos);
+    const rows = Object.values(grouped).filter(r => r.totalKilos > 0 || r.totalHojas > 0);
 
-    const aH = cfg.h || 200; // Altura pasillo estimada 2m si no hay
+    const aH = cfg.h || 200; 
     const aL = cfg.l || 0;
     const aW = cfg.w || 0;
     
     let totalLinearUsed = 0;
-    const PALLET_W = 80;  // Estándar Euro
-    const PALLET_L = 120; // Estándar Euro
-    const WOOD_H   = 15;  // Altura palet madera cm
+    let totalVolM3 = 0;
+    const PALLET_W = 80; const PALLET_L = 120; const WOOD_H = 15;
 
     rows.forEach(r => {
         const d = parsePaperDimensions(r.tipo);
@@ -361,38 +366,43 @@ function showInspector(aisleData) {
         const bulk = getBulkFactor(r.id);
         const numPal = Math.ceil(r.totalKilos / getKgPerPalet(r.id));
         
-        // Huella en suelo (footprint): basándonos en el tamaño del papel o palet estándar
-        let pW = PALLET_W, pL = PALLET_L;
-        if (d) {
-            // El papel se apila en su dimensión mayor o menor, asumimos margen de 5cm
-            pW = Math.max(PALLET_W, d.w + 5);
-            pL = Math.max(PALLET_L, d.h + 5);
-        }
-        const refFootprintLength = Math.max(pW, pL); // Asumimos que se alinean por el lado largo en el lineal
+        let pW = PALLET_W;
+        if (d) pW = Math.max(PALLET_W, d.w + 5);
 
         if (d && g > 0) {
-            // Volume Cubic: Area * (Gram/1e6) * bulk * Hojas
             const vol = ( (d.w * d.h) / 10000 ) * (g / 1000000) * bulk * r.totalHojas;
             totalVolM3 += vol;
-            
-            // Altura total de la pila (cm): (Hojas * gram / 10000 * bulk) + (numPalets * madera)
             const paperH = r.totalHojas * (g / 10000) * bulk;
             const stackH = paperH + (numPal * WOOD_H);
-            
-            // Cuántas columnas (bases) necesitamos si respetamos la altura del pasillo aH
-            const basesForThisRef = Math.ceil(stackH / (aH * 0.9)); // Margen del 10% al techo
-            basesNeeded += basesForThisRef;
-            totalLinearUsed += basesForThisRef * (pW + 10); // +10cm de margen entre pilas
+            const basesForThisRef = Math.ceil(stackH / (aH * 0.9));
+            totalLinearUsed += basesForThisRef * (pW + 10);
         } else {
-            // Sin dimensiones conocidas: asumimos 1 palet = 1 base estándar
-            basesNeeded += numPal;
             totalLinearUsed += numPal * (PALLET_W + 15);
         }
     });
 
     const aisleVolM3 = (aL && aW && aH) ? (aL * aW * aH) / 1000000 : 0;
-    const linearOcc  = (aL > 0) ? (totalLinearUsed / aL) * 100 : 0;
-    const volOcc     = (aisleVolM3 > 0) ? (totalVolM3 / aisleVolM3) * 100 : 0;
+    return {
+        pal, cap,
+        linearUsed: totalLinearUsed, linearMax: aL,
+        cubicUsed: totalVolM3, cubicMax: aisleVolM3,
+        rows // Devuelve las filas agrupadas para el inspector
+    };
+}
+
+function showInspector(aisleData) {
+    const panel = document.getElementById('inspector-panel');
+    panel.className = 'inspector-panel';
+    const disabled = isDisabled(aisleData);
+    const v = getAisleVolumetry(aisleData);
+    const occ = v.cap > 0 ? (v.pal / v.cap) * 100 : 0;
+    const col = disabled ? '#6b7280' : getHeatmapColorHex(occ);
+    
+    const rows = v.rows.sort((a,b) => b.totalKilos - a.totalKilos);
+    const aL = v.linearMax;
+    const aisleVolM3 = v.cubicMax;
+    const linearOcc = v.linearMax > 0 ? (v.linearUsed / v.linearMax) * 100 : 0;
+    const volOcc = v.cubicMax > 0 ? (v.cubicUsed / v.cubicMax) * 100 : 0;
 
     const statusBadge = disabled
         ? `<span class="insp-badge" style="background:#374151;color:#9ca3af;">⛔ Pasillo Anulado — no cuenta en métricas</span>`
