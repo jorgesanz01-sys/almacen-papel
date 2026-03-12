@@ -315,11 +315,17 @@ function showInspector(aisleData) {
     const aL = cfg.l || 0;
     const aW = cfg.w || 0;
     
+    let totalLinearUsed = 0;
+
     rows.forEach(r => {
         const d = parsePaperDimensions(r.tipo);
         const g = parseInt(r.gramaje) || 0;
         const numPal = Math.ceil(r.totalKilos / getKgPerPalet(r.id));
         
+        // Determinar longitud necesaria para ESTE palet/referencia
+        let refLength = 110; // default 1.1m
+        if (d) refLength = Math.max(d.w, d.h) + 10; // Dimensión mayor + 10cm margen
+
         if (d && g > 0) {
             // Volume = Area * (Gram/1e6) * bulk * Hojas
             const vol = ( (d.w * d.h) / 10000 ) * (g / 1000000) * 1.2 * r.totalHojas;
@@ -330,33 +336,25 @@ function showInspector(aisleData) {
             const stackH = paperH + (numPal * 15);
             
             // Bases necesarias para esta referencia (stacking vertical limitado por aH)
-            basesNeeded += Math.ceil(stackH / aH);
+            const basesForThisRef = Math.ceil(stackH / aH);
+            basesNeeded += basesForThisRef;
+            totalLinearUsed += basesForThisRef * refLength;
         } else {
-            // Sin dimensiones: 1 palet = 1 base por simplificación
+            // Sin dimensiones: 1 palet = 1 base de 110cm
             basesNeeded += numPal;
+            totalLinearUsed += numPal * refLength;
         }
     });
 
     const aisleVolM3 = (aL && aW && aH) ? (aL * aW * aH) / 1000000 : 0;
-    
-    // Capacidad en bases (suelo): El palet más grande de la fila marca el espacio
-    let maxPalDim = 100; // mínimo 1m
-    rows.forEach(r => {
-        const d = parsePaperDimensions(r.tipo);
-        if (d) maxPalDim = Math.max(maxPalDim, d.w, d.h);
-    });
-    // Añadir margen de 10cm al palet
-    const palLength = maxPalDim + 10; 
-    
-    const maxBases  = aL > 0 ? Math.floor(aL / palLength) : 0;
-    const volOcc    = maxBases > 0 ? (basesNeeded / maxBases) * 100 : (aisleVolM3 > 0 ? (totalVolM3 / aisleVolM3) * 100 : 0);
+    const volOcc    = (aL > 0) ? (totalLinearUsed / aL) * 100 : (aisleVolM3 > 0 ? (totalVolM3 / aisleVolM3) * 100 : 0);
 
     const statusBadge = disabled
         ? `<span class="insp-badge" style="background:#374151;color:#9ca3af;">⛔ Pasillo Anulado — no cuenta en métricas</span>`
         : `<span class="insp-badge" style="background:${col}22;color:${col};">${Math.round(occ)}% · ${pal} / ${cap} pal.</span>`;
 
-    const volBadge = (maxBases > 0)
-        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;">${Math.round(volOcc)}% Suelo (${basesNeeded}/${maxBases} bases)</span>`
+    const volBadge = (aL > 0)
+        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;">${Math.round(volOcc)}% Lineal (${(totalLinearUsed/100).toFixed(1)}m / ${(aL/100).toFixed(1)}m)</span>`
         : (totalVolM3 > 0 ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);margin-left:5px;">${totalVolM3.toFixed(2)} m³</span>` : '');
 
     let html = `
