@@ -68,7 +68,7 @@ function getCapacity(aisle) {
 }
 function isDisabled(aisle) { return !!(aisleConfig[aisle.id] || {}).disabled; }
 function getHeatmapClass(r) { return r < 30 ? 'empty' : r <= 75 ? 'medium' : 'full'; }
-function getHeatmapColorHex(r) { return r < 30 ? '#10b981' : r <= 75 ? '#f59e0b' : '#e11d48'; }
+function getHeatmapColorHex(r) { return r < 30 ? '#10b981' : r <= 75 ? '#f59e0b' : '#f43f5e'; }
 function fmtNum(n) { return Number(n).toLocaleString('es-ES'); }
 function esc(s) {
     if (s == null) return '';
@@ -417,8 +417,27 @@ function showInspector(aisleData) {
         html += `<div class="empty-state"><i class="ri-inbox-line"></i><p>Pasillo vacío</p></div>`;
     }
 
-    html += `</div>`;
+    html += `</div>
+        <div class="inspector-footer" style="padding:15px 20px; border-top:1px solid var(--glass-border); display:flex; justify-content:flex-end; background:var(--bg-block);">
+            <button class="btn-primary" id="btn-export-aisle" style="gap:8px;">
+                <i class="ri-file-excel-2-line"></i> Exportar Listado
+            </button>
+        </div>`;
+    
     panel.innerHTML = html;
+
+    panel.querySelector('#btn-export-aisle')?.addEventListener('click', () => {
+        const exportData = rows.map(r => ({
+            "Referencia": r.id,
+            "Descripción": r.tipo,
+            "Pliegos": r.totalHojas,
+            "Kilos": Math.round(r.totalKilos),
+            "Kg/Palet": getKgPerPalet(r.id),
+            "Palets Est.": (r.totalKilos / getKgPerPalet(r.id)).toFixed(1)
+        }));
+        exportToExcel(exportData, `Inventario_Pasillo_${aisleData.id}`);
+    });
+
     panel.querySelector('[data-action="edit"]')?.addEventListener('click', () => openEditModal(aisleData.id));
     panel.querySelector('[data-action="toggle"]')?.addEventListener('click', () => toggleAisleDisabled(aisleData.id));
     panel.querySelector('[data-action="close"]')?.addEventListener('click', closeInspector);
