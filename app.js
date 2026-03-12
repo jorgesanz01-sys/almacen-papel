@@ -61,6 +61,11 @@ function getKgPerPalet(refId) {
         ? articleConfig[refId].kgPerPalet
         : 600;
 }
+function getBulkFactor(refId) {
+    return (articleConfig[refId] && articleConfig[refId].bulk > 0)
+        ? articleConfig[refId].bulk
+        : 1.2;
+}
 
 function calcTotalKilos(items) {
     if (!items || !items.length) return 0;
@@ -346,46 +351,60 @@ function showInspector(aisleData) {
     const aW = cfg.w || 0;
     
     let totalLinearUsed = 0;
+    const PALLET_W = 80;  // Estándar Euro
+    const PALLET_L = 120; // Estándar Euro
+    const WOOD_H   = 15;  // Altura palet madera cm
 
     rows.forEach(r => {
         const d = parsePaperDimensions(r.tipo);
         const g = parseInt(r.gramaje) || 0;
+        const bulk = getBulkFactor(r.id);
         const numPal = Math.ceil(r.totalKilos / getKgPerPalet(r.id));
         
-        // Determinar longitud necesaria para ESTE palet/referencia
-        let refLength = 110; // default 1.1m
-        if (d) refLength = Math.max(d.w, d.h) + 10; // Dimensión mayor + 10cm margen
+        // Huella en suelo (footprint): basándonos en el tamaño del papel o palet estándar
+        let pW = PALLET_W, pL = PALLET_L;
+        if (d) {
+            // El papel se apila en su dimensión mayor o menor, asumimos margen de 5cm
+            pW = Math.max(PALLET_W, d.w + 5);
+            pL = Math.max(PALLET_L, d.h + 5);
+        }
+        const refFootprintLength = Math.max(pW, pL); // Asumimos que se alinean por el lado largo en el lineal
 
         if (d && g > 0) {
-            // Volume = Area * (Gram/1e6) * bulk * Hojas
-            const vol = ( (d.w * d.h) / 10000 ) * (g / 1000000) * 1.2 * r.totalHojas;
+            // Volume Cubic: Area * (Gram/1e6) * bulk * Hojas
+            const vol = ( (d.w * d.h) / 10000 ) * (g / 1000000) * bulk * r.totalHojas;
             totalVolM3 += vol;
             
-            // Altura (cm): (Hojas * gram / 10000 * 1.2) + (numPalets * 15cm madera)
-            const paperH = r.totalHojas * (g / 10000) * 1.2;
-            const stackH = paperH + (numPal * 15);
+            // Altura total de la pila (cm): (Hojas * gram / 10000 * bulk) + (numPalets * madera)
+            const paperH = r.totalHojas * (g / 10000) * bulk;
+            const stackH = paperH + (numPal * WOOD_H);
             
-            // Bases necesarias para esta referencia (stacking vertical limitado por aH)
-            const basesForThisRef = Math.ceil(stackH / aH);
+            // Cuántas columnas (bases) necesitamos si respetamos la altura del pasillo aH
+            const basesForThisRef = Math.ceil(stackH / (aH * 0.9)); // Margen del 10% al techo
             basesNeeded += basesForThisRef;
-            totalLinearUsed += basesForThisRef * refLength;
+            totalLinearUsed += basesForThisRef * (pW + 10); // +10cm de margen entre pilas
         } else {
-            // Sin dimensiones: 1 palet = 1 base de 110cm
+            // Sin dimensiones conocidas: asumimos 1 palet = 1 base estándar
             basesNeeded += numPal;
-            totalLinearUsed += numPal * refLength;
+            totalLinearUsed += numPal * (PALLET_W + 15);
         }
     });
 
     const aisleVolM3 = (aL && aW && aH) ? (aL * aW * aH) / 1000000 : 0;
-    const volOcc    = (aL > 0) ? (totalLinearUsed / aL) * 100 : (aisleVolM3 > 0 ? (totalVolM3 / aisleVolM3) * 100 : 0);
+    const linearOcc  = (aL > 0) ? (totalLinearUsed / aL) * 100 : 0;
+    const volOcc     = (aisleVolM3 > 0) ? (totalVolM3 / aisleVolM3) * 100 : 0;
 
     const statusBadge = disabled
         ? `<span class="insp-badge" style="background:#374151;color:#9ca3af;">⛔ Pasillo Anulado — no cuenta en métricas</span>`
         : `<span class="insp-badge" style="background:${col}22;color:${col};">${Math.round(occ)}% · ${pal} / ${cap} pal.</span>`;
 
     const volBadge = (aL > 0)
-        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;">${Math.round(volOcc)}% Lineal (${(totalLinearUsed/100).toFixed(1)}m / ${(aL/100).toFixed(1)}m)</span>`
+        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;" title="Ocupación lineal basada en huecos en suelo">${Math.round(linearOcc)}% Lineal (${(totalLinearUsed/100).toFixed(1)}m / ${(aL/100).toFixed(1)}m)</span>`
         : (totalVolM3 > 0 ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);margin-left:5px;">${totalVolM3.toFixed(2)} m³</span>` : '');
+
+    const cubicBadge = (aisleVolM3 > 0)
+        ? `<span class="insp-badge" style="background:#8b5cf622;color:#8b5cf6;margin-left:5px;" title="Ocupación cúbica real del papel">${Math.round(volOcc)}% Cúbico</span>`
+        : '';
 
     let html = `
         <div class="inspector-header">
@@ -394,6 +413,7 @@ function showInspector(aisleData) {
                 <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
                     ${statusBadge}
                     ${volBadge}
+                    ${cubicBadge}
                 </div>
             </div>
             <div style="display:flex;gap:6px;align-items:flex-start;">
