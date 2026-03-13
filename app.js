@@ -231,6 +231,9 @@ async function initMockData() {
 
 // ─── RENDER MAPA ─────────────────────────────────────────────────────────────
 function renderWarehouse() {
+    const gridEl = document.getElementById('warehouse-grid');
+    if (!gridEl) return;
+    gridEl.innerHTML = '';
     let globalPal = 0, globalCap = 0;
     let globalLinUsed = 0, globalLinMax = 0;
     let globalCubUsed = 0, globalCubMax = 0;
@@ -254,9 +257,14 @@ function renderWarehouse() {
                 
                 if (!disabled && !block.isExternal) {
                     globalPal += v.pal; globalCap += v.cap;
-                    globalLinUsed += v.linearUsed; globalLinMax += v.linearMax;
-                    globalCubUsed += v.cubicUsed; globalCubMax += v.cubicMax;
+                    if (v.linearMax > 0) {
+                        globalLinUsed += v.linearUsed; globalLinMax += v.linearMax;
+                    }
+                    if (v.cubicMax > 0) {
+                        globalCubUsed += v.cubicUsed; globalCubMax += v.cubicMax;
+                    }
                 }
+
 
                 const occ  = v.cap > 0 ? (v.pal / v.cap) * 100 : 0;
                 const heat = disabled ? 'disabled' : getHeatmapClass(occ);
@@ -390,6 +398,12 @@ function getAisleVolumetry(aisleData) {
     };
 }
 
+// ─── INSPECTOR ────────────────────────────────────────────────────────────────
+function closeInspector() {
+    document.getElementById('inspector-panel').classList.remove('visible');
+    document.querySelectorAll('.aisle-unit.active').forEach(a => a.classList.remove('active'));
+}
+
 function showInspector(aisleData) {
     const panel = document.getElementById('inspector-panel');
     panel.className = 'inspector-panel';
@@ -406,11 +420,11 @@ function showInspector(aisleData) {
 
     const statusBadge = disabled
         ? `<span class="insp-badge" style="background:#374151;color:#9ca3af;">⛔ Pasillo Anulado — no cuenta en métricas</span>`
-        : `<span class="insp-badge" style="background:${col}22;color:${col};">${Math.round(occ)}% · ${pal} / ${cap} pal.</span>`;
+        : `<span class="insp-badge" style="background:${col}22;color:${col};">${Math.round(occ)}% · ${v.pal} / ${v.cap} pal.</span>`;
 
     const volBadge = (aL > 0)
-        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;" title="Ocupación lineal basada en huecos en suelo">${Math.round(linearOcc)}% Lineal (${(totalLinearUsed/100).toFixed(1)}m / ${(aL/100).toFixed(1)}m)</span>`
-        : (totalVolM3 > 0 ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);margin-left:5px;">${totalVolM3.toFixed(2)} m³</span>` : '');
+        ? `<span class="insp-badge" style="background:#0ea5e922;color:#0ea5e9;margin-left:5px;" title="Ocupación lineal basada en huecos en suelo">${Math.round(linearOcc)}% Lineal (${(v.linearUsed/100).toFixed(1)}m / ${(aL/100).toFixed(1)}m)</span>`
+        : (v.cubicUsed > 0 ? `<span class="insp-badge" style="background:rgba(255,255,255,0.05);color:var(--text-muted);margin-left:5px;">${v.cubicUsed.toFixed(2)} m³</span>` : '');
 
     const cubicBadge = (aisleVolM3 > 0)
         ? `<span class="insp-badge" style="background:#8b5cf622;color:#8b5cf6;margin-left:5px;" title="Ocupación cúbica real del papel">${Math.round(volOcc)}% Cúbico</span>`
